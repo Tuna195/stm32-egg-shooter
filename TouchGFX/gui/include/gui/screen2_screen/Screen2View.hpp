@@ -6,8 +6,7 @@
 #include <touchgfx/widgets/Image.hpp>
 #include <touchgfx/Color.hpp>
 
-#define ROWS 5
-#define VISIBLE_ROWS 5
+#define ROWS 8
 #define COLS 8
 #define EMPTY 0
 #define RED 1
@@ -36,21 +35,38 @@ protected:
     void clearEggGrid();
     void ensureMatchablePattern();
     void dropEggGrid();
-    bool hasEggBelowVisible() const;
+    bool hasEggCrossedDangerLine() const;
     void addNewTopRow();
     void notifyGameOver();
 
 private:
     uint8_t eggGrid[ROWS][COLS];
     touchgfx::Image eggImages[ROWS][COLS];
+    touchgfx::Box dangerLine;
+    static const int MAX_FALLING_EGGS = ROWS * COLS;
+    touchgfx::Image fallingEggImages[MAX_FALLING_EGGS];
+    float fallingEggY[MAX_FALLING_EGGS];
+    float fallingEggVelocity[MAX_FALLING_EGGS];
+    bool fallingEggActive[MAX_FALLING_EGGS];
+    int activeFallingEggs;
+    static const int MAX_POP_EGGS = ROWS * COLS;
+    static const uint32_t POP_ANIMATION_MS = 160U;
+    touchgfx::Image popEggImages[MAX_POP_EGGS];
+    uint32_t popEggStartTick[MAX_POP_EGGS];
+    bool popEggActive[MAX_POP_EGGS];
+    int activePopEggs;
     int score;
     Unicode::UnicodeChar scoreBuffer[10];
     int shotCount;
+    int gridPhase;
     static const int SHOTS_BEFORE_DROP = 5;
     void onEggShot();
     bool checkGameOver();
-    bool checkBottomRowOccupied();
     void triggerGameOver();
+
+    static const int EGG_HEIGHT = 32;
+    static const int EGG_SPACING_Y = 26;
+    static const int DANGER_LINE_Y = 220;
 
     // Biến joystick
     int16_t joystickX, joystickY;
@@ -63,6 +79,7 @@ private:
     float projectileVX, projectileVY;
     bool projectileActive;
     bool lastButtonPressed = false;
+    uint32_t lastShotButtonTick = 0;
 
     // Hình ảnh viên đạn
     touchgfx::Image projectileImage;
@@ -88,7 +105,7 @@ private:
     void updateCannonAndEggPosition();
     void updateAimLine();
     void updateAimVisual();
-    void shootEgg();
+    bool shootEgg();
     void createProjectile(int x, int y, float vx, float vy);
     void updateProjectile();
     void checkProjectileCollision();
@@ -99,6 +116,10 @@ private:
     // Thêm đúng tham số khớp với .cpp
     void handleCollisionWithEgg(int hitRow, int hitCol);
     void findAndRemoveMatchingGroup(int row, int col);
+    int detachUnsupportedEggs();
+    void updateFallingEggs();
+    void startPopAnimation(int row, int col, uint8_t color);
+    void updatePopAnimations();
     void debugJoystick();
     void debugAiming();
     void smoothAngleToTarget();
@@ -107,7 +128,8 @@ private:
     int16_t  applySmoothCurve(int16_t value, int16_t maxRange);
     int getCannonBaseX();
     int getCannonBaseY();
-    bool isValidGridPosition(int row, int col);
+    bool isShiftedRow(int row) const;
+    bool isValidGridPosition(int row, int col) const;
     void forceResetGame();
     // THÊM CÁC BIẾN MỚI CHO SMOOTH AIMING:
         float targetAngle;        // Góc đích muốn đạt tới

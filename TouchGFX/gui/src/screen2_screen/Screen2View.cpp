@@ -17,15 +17,34 @@ T clamp(T value, T minVal, T maxVal)
     return value;
 }
 
-Screen2View::Screen2View() : score(0), shotCount(0), droppedLineCount(0),
+Screen2View::Screen2View() : score(0), shotCount(0), gridPhase(0), droppedLineCount(0),
                            targetAngle(0), currentAngleFloat(0),
                            isAiming(false), lastAimTime(0)
 {
+    dangerLine.setPosition(0, DANGER_LINE_Y, 240, 2);
+    dangerLine.setColor(touchgfx::Color::getColorFromRGB(255, 48, 48));
+    add(dangerLine);
+
     // Khởi tạo mảng eggGrid
     for(int i = 0; i < ROWS; i++) {
         for(int j = 0; j < COLS; j++) {
             eggGrid[i][j] = EMPTY;
         }
+    }
+
+    activeFallingEggs = 0;
+    for (int i = 0; i < MAX_FALLING_EGGS; ++i)
+    {
+        fallingEggActive[i] = false;
+        fallingEggY[i] = 0.0f;
+        fallingEggVelocity[i] = 0.0f;
+    }
+
+    activePopEggs = 0;
+    for (int i = 0; i < MAX_POP_EGGS; ++i)
+    {
+        popEggActive[i] = false;
+        popEggStartTick[i] = 0U;
     }
 }
 
@@ -33,6 +52,26 @@ Screen2View::Screen2View() : score(0), shotCount(0), droppedLineCount(0),
 void Screen2View::setupScreen()
 {
 	Screen2ViewBase::setupScreen();
+
+        // Joystick SW (PC2) is active-low; the blue USER button (PA0) is
+        // active-high on the STM32F429I-DISCO board.
+        __HAL_RCC_GPIOA_CLK_ENABLE();
+        __HAL_RCC_GPIOC_CLK_ENABLE();
+
+        GPIO_InitTypeDef buttonConfig = {0};
+        buttonConfig.Pin = GPIO_PIN_2;
+        buttonConfig.Mode = GPIO_MODE_INPUT;
+        buttonConfig.Pull = GPIO_PULLUP;
+        HAL_GPIO_Init(GPIOC, &buttonConfig);
+
+        buttonConfig.Pin = GPIO_PIN_0;
+        buttonConfig.Pull = GPIO_NOPULL;
+        HAL_GPIO_Init(GPIOA, &buttonConfig);
+
+        lastButtonPressed =
+            (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_2) == GPIO_PIN_RESET) ||
+            (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_SET);
+        lastShotButtonTick = HAL_GetTick();
 
 	    // Reset joystick calibration khi vào màn hình
 	    resetJoystickCalibration();
@@ -48,9 +87,29 @@ void Screen2View::setupScreen()
 	        }
 	    }
 
+        activeFallingEggs = 0;
+        for (int i = 0; i < MAX_FALLING_EGGS; ++i)
+        {
+            fallingEggActive[i] = false;
+            fallingEggImages[i].setVisible(false);
+            container2.add(fallingEggImages[i]);
+        }
+
+        activePopEggs = 0;
+        for (int i = 0; i < MAX_POP_EGGS; ++i)
+        {
+            popEggActive[i] = false;
+            popEggImages[i].setAlpha(255U);
+            popEggImages[i].setVisible(false);
+            container2.add(popEggImages[i]);
+        }
+
 	    shotCount = 0;
+	    gridPhase = 0;
 	    droppedLineCount = 0;
 	    aimAngle = 0;
+	    projectileActive = false;
+	    pendingGroupClear = false;
 
 	    initEggGrid();
 	    renderEggGrid();
@@ -94,7 +153,7 @@ void Screen2View::initEggGrid()
     for(int row = 0; row < 2; row++) // 3 hàng đầu
     {
         // Hàng chẵn có 8 quả; hàng lẻ có 7 quả và lệch nửa ô.
-        int maxCols = COLS - (row % 2);
+        int maxCols = COLS - (isShiftedRow(row) ? 1 : 0);
 
         // Căn giữa các trứng trong hàng
         int startCol = (COLS - maxCols) / 2;
@@ -150,6 +209,12 @@ void Screen2View::renderEggGrid()
     {
         for(int col = 0; col < COLS; col++)
         {
+            if (!isValidGridPosition(row, col))
+            {
+                eggImages[row][col].setVisible(false);
+                continue;
+            }
+
             if(eggGrid[row][col] != EMPTY)
             {
                 // Chọn bitmap theo màu
@@ -163,7 +228,7 @@ void Screen2View::renderEggGrid()
                 }
 
                 // Tính toán vị trí hexagonal pattern
-                int xOffset = (row % 2 == 1) ? HEX_OFFSET : 0; // Hàng lẻ lệch phải
+                int xOffset = isShiftedRow(row) ? HEX_OFFSET : 0;
                 int x = baseX + col * EGG_SPACING_X + xOffset;
                 int y = baseY + row * EGG_SPACING_Y;
 
@@ -192,12 +257,11 @@ void Screen2View::onEggShot()
         dropEggGrid();
         shotCount = 0; // Reset counter
 
-//        // Kiểm tra game over
-//        if(checkGameOver())
-//        {
-//
-//            return;
-//        }
+        if (hasEggCrossedDangerLine())
+        {
+            triggerGameOver();
+            return;
+        }
     }
 
     // Spawn trứng mới cho lần bắn tiếp theo
@@ -205,13 +269,28 @@ void Screen2View::onEggShot()
 }
 
 
-/** Trả về true nếu trứng đã chạm hàng cuối của vùng chơi. */
-bool Screen2View::hasEggBelowVisible() const
+/** Trả về true nếu mép dưới của bất kỳ trứng nào chạm danger line. */
+bool Screen2View::hasEggCrossedDangerLine() const
 {
-    const int bottomVisibleRow = VISIBLE_ROWS - 1;
-    for (int col = 0; col < COLS; ++col)
-        if (eggGrid[bottomVisibleRow][col] != EMPTY)
-            return true;
+    const int gridTopY = container2.getY();
+
+    for (int row = 0; row < ROWS; ++row)
+    {
+        const int eggBottomY = gridTopY + row * EGG_SPACING_Y + EGG_HEIGHT;
+        if (eggBottomY < DANGER_LINE_Y)
+        {
+            continue;
+        }
+
+        for (int col = 0; col < COLS; ++col)
+        {
+            if (isValidGridPosition(row, col) && eggGrid[row][col] != EMPTY)
+            {
+                return true;
+            }
+        }
+    }
+
     return false;
 }
 
@@ -226,44 +305,32 @@ void Screen2View::dropEggGrid()
         {
             eggGrid[row][col] = eggGrid[row - 1][col];
         }
-
-        // Hàng lẻ chỉ có 7 ô hợp lệ.
-        if ((row % 2) == 1)
-        {
-            eggGrid[row][COLS - 1] = EMPTY;
-        }
     }
+
+    // Đảo pha khi hạ lưới để một hàng 8 ô vẫn là hàng 8 ô tại vị trí
+    // mới. Nếu không, col cuối sẽ bị xóa âm thầm khi rơi vào hàng 7 ô.
+    gridPhase ^= 1;
 
     // Thêm hàng mới ở trên (có thể random hoặc theo pattern)
     addNewTopRow();
 
-    // Render lại
+    // Render lại; onEggShot() sẽ kiểm tra danger line sau khi hạ lưới.
     renderEggGrid();
-
-	if(hasEggBelowVisible())
-	{
-		triggerGameOver();
-	}
 }
 
 void Screen2View::addNewTopRow()
 {
-    // Thêm hàng mới ở trên với pattern logic
-    uint32_t tick = HAL_GetTick();
-
-    for(int col = 0; col < COLS; col++)
+    // Thêm hàng mới ở trên theo pha 8/7 ô hiện tại.
+    const int topRowColumns = COLS - (isShiftedRow(0) ? 1 : 0);
+    for(int col = 0; col < topRowColumns; col++)
     {
         eggGrid[0][col] = randomColor(); // Luôn có trứng ở mỗi ô
     }
+    for (int col = topRowColumns; col < COLS; ++col)
+    {
+        eggGrid[0][col] = EMPTY;
+    }
 }
-bool Screen2View::checkBottomRowOccupied()
-{
-    for(int col = 0; col < COLS; ++col)
-        if(eggGrid[ROWS - 1][col] != EMPTY)
-            return true;
-    return false;
-}
-
 /* Hàm dùng chung để đóng game và nhảy màn */
 void Screen2View::triggerGameOver()
 {
@@ -274,8 +341,9 @@ void Screen2View::triggerGameOver()
     projectileImage.setVisible(false);
     projectileImage.invalidate();
 
-    HAL_UART_Transmit(&huart1,
-        (uint8_t*)"GAME OVER – drop > 5!\r\n", 24, 100);
+    const char* gameOverMessage = "GAME OVER - danger line crossed!\r\n";
+    HAL_UART_Transmit(&huart1, (uint8_t*)gameOverMessage,
+        strlen(gameOverMessage), 100);
 
     notifyGameOver();
 }
@@ -285,25 +353,7 @@ void Screen2View::notifyGameOver()
 }
 bool Screen2View::checkGameOver()
 {
-    // Kiểm tra xem có trứng nào ở hàng cuối không
-    for(int col = 0; col < COLS; col++)
-    {
-        if(eggGrid[ROWS - 1][col] != EMPTY)
-        {
-            return true; // Game Over!
-        }
-    }
-
-    // Hoặc kiểm tra xem có trứng nào quá gần đường bắn không
-    for(int col = 0; col < COLS; col++)
-    {
-        if(eggGrid[ROWS - 2][col] != EMPTY) // Hàng áp cuối
-        {
-            return true; // Sắp Game Over
-        }
-    }
-
-    return false;
+    return hasEggCrossedDangerLine();
 }
 
 
@@ -313,7 +363,6 @@ void Screen2View::spawnNextEgg()
     nextEgg.setVisible(false);
     nextEgg.invalidate();
 
-    uint32_t tick = HAL_GetTick();
     uint8_t color = randomColor();
     currentEggColor = color; // <== THÊM DÒNG NÀY
 
@@ -348,6 +397,22 @@ void Screen2View::clearEggGrid()
             eggImages[row][col].setVisible(false);
             eggGrid[row][col] = EMPTY;
         }
+    }
+
+    activeFallingEggs = 0;
+    for (int i = 0; i < MAX_FALLING_EGGS; ++i)
+    {
+        fallingEggActive[i] = false;
+        fallingEggImages[i].setVisible(false);
+    }
+
+
+    activePopEggs = 0;
+    for (int i = 0; i < MAX_POP_EGGS; ++i)
+    {
+        popEggActive[i] = false;
+        popEggImages[i].setAlpha(255U);
+        popEggImages[i].setVisible(false);
     }
 }
 // Thêm vào Screen2View.cpp
@@ -409,21 +474,29 @@ void Screen2View::updateJoystickInput()
     joystickX = applySmoothCurve(rawX, MAX_RANGE);
     joystickY = applySmoothCurve(rawY, MAX_RANGE);
 
-    // Kiểm tra nút nhấn (SW)
-    GPIO_PinState buttonState = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_2);
-    bool currentPressed = (buttonState == GPIO_PIN_RESET);
+    // Joystick SW is active-low; the blue USER button is active-high.
+    const bool joystickButtonPressed =
+        HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_2) == GPIO_PIN_RESET;
+    const bool userButtonPressed =
+        HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_SET;
+    const bool currentPressed = joystickButtonPressed || userButtonPressed;
+    const uint32_t now = HAL_GetTick();
 
-    if (currentPressed && !lastButtonPressed)
+    if (currentPressed && !lastButtonPressed &&
+        (now - lastShotButtonTick >= 50U))
     {
-        // Gọi chức năng bắn
-        shootEgg();
+        lastShotButtonTick = now;
 
-        // Rung bất đồng bộ; không chặn GUI/game loop.
-        Haptic_Play(HAPTIC_SHOOT);
+        // Chỉ phản hồi khi một phát bắn thực sự được tạo.
+        if (shootEgg())
+        {
+            // Rung bất đồng bộ; không chặn GUI/game loop.
+            Haptic_Play(HAPTIC_SHOOT);
 
-        // Debug UART nếu cần
-        const char* beepMsg = "Beep!\r\n";
-        HAL_UART_Transmit(&huart1, (uint8_t*)beepMsg, strlen(beepMsg), 100);
+            // Debug UART nếu cần
+            const char* beepMsg = "Beep!\r\n";
+            HAL_UART_Transmit(&huart1, (uint8_t*)beepMsg, strlen(beepMsg), 100);
+        }
     }
 
     lastButtonPressed = currentPressed;
@@ -474,11 +547,21 @@ void Screen2View::handleTickEvent()
 {
     updateAimDirection();
     updateProjectile();
+    updateFallingEggs();
+    updatePopAnimations();
     debugAiming();  // THÊM dòng này để debug
     if (pendingGroupClear)
     {
         pendingGroupClear = false; // Đánh dấu đã xử lý
         findAndRemoveMatchingGroup(pendingRow, pendingCol);
+
+        // Cho phép nhóm vừa tạo được xóa trước; chỉ game-over nếu sau đó
+        // vẫn còn trứng chạm hoặc vượt qua danger line.
+        if (hasEggCrossedDangerLine())
+        {
+            triggerGameOver();
+            return;
+        }
 
         // Sau khi xử lý xong, tạo quả mới
         onEggShot();
@@ -572,33 +655,27 @@ void Screen2View::setAimAngle(float angle)
 // Cập nhật đường ngắm từ base cannon
 void Screen2View::updateAimLine()
 {
-    float radians = (aimAngle * 3.14159f) / 180.0f;
-
-    const int CANNON_BASE_X = 240;
-    const int CANNON_BASE_Y = 320;
-    const int AIM_LINE_LENGTH = 100;
-
-    int endX = CANNON_BASE_X + (int)(sin(radians) * AIM_LINE_LENGTH);
-    int endY = CANNON_BASE_Y - (int)(cos(radians) * AIM_LINE_LENGTH);
-
-    // Nếu có Line widget để vẽ đường ngắm:
-    // aimLine.setStart(CANNON_BASE_X, CANNON_BASE_Y);
-    // aimLine.setEnd(aimLineEndX, aimLineEndY);
-    // aimLine.invalidate();
+    // Chưa có Line widget; hướng ngắm được thể hiện bằng cannon và nextEgg.
 }
 
 
 // Cập nhật hàm bắn để bắn từ đầu nòng súng
-void Screen2View::shootEgg()
+bool Screen2View::shootEgg()
 {
+    // Một lần chỉ có một projectile. Sau va chạm, tiếp tục khóa cho tới
+    // khi nhóm đã được xử lý và quả kế tiếp đã được sinh.
+    if (projectileActive || pendingGroupClear ||
+        activeFallingEggs > 0 || activePopEggs > 0)
+    {
+        return false;
+    }
+
     // Ẩn nextEgg khi bắn
     nextEgg.setVisible(false);
     nextEgg.invalidate();
 
     float radians = (aimAngle * 3.14159f) / 180.0f;
 
-    const int CANNON_BASE_X = 240;
-    const int CANNON_BASE_Y = 320;
     const int SHOOT_DISTANCE = 45;
 
     int startX = getCannonBaseX() + (int)(sin(radians) * SHOOT_DISTANCE);
@@ -607,10 +684,11 @@ void Screen2View::shootEgg()
 
     float dirX = sin(radians);
     float dirY = -cos(radians);
-    float speed = 3.0f;
+    const float speed = 5.0f;
 
     createProjectile(startX, startY, dirX * speed, dirY * speed);
-    }
+    return true;
+}
 
 // Hàm tạo đạn bay (cần implement thêm)
 void Screen2View::createProjectile(int x, int y, float vx, float vy)
@@ -646,11 +724,6 @@ void Screen2View::updateProjectile()
 
     const int BALL_SIZE = 32;
     const int SCREEN_WIDTH = 240 ;
-    const int SCREEN_HEIGHT = 320; // hoặc chiều cao thực tế
-
-    // Lưu vị trí cũ
-    float oldX = projectileX;
-    float oldY = projectileY;
 
     // Cập nhật vị trí
     projectileX += projectileVX;
@@ -716,7 +789,8 @@ void Screen2View::handleCollisionWithEgg(int hitRow, int hitCol)
     {
         // Nếu vị trí không hợp lệ, đặt vào hàng đầu
         hitRow = 0;
-        hitCol = clamp(hitCol, 0, COLS - 1);
+        const int topRowMaxCol = isShiftedRow(0) ? COLS - 2 : COLS - 1;
+        hitCol = clamp(hitCol, 0, topRowMaxCol);
     }
 
     int attachRow = -1, attachCol = -1;
@@ -740,7 +814,8 @@ void Screen2View::handleCollisionWithEgg(int hitRow, int hitCol)
         for (int i = 0; i < 6; ++i)
         {
             int nr = hitRow + dr[i];
-            int nc = hitCol + ((hitRow % 2 == 0) ? dc_even[i] : dc_odd[i]);
+            int nc = hitCol +
+                (isShiftedRow(hitRow) ? dc_odd[i] : dc_even[i]);
 
             if (!isValidGridPosition(nr, nc)) continue;
             if (eggGrid[nr][nc] != EMPTY) continue;
@@ -748,7 +823,7 @@ void Screen2View::handleCollisionWithEgg(int hitRow, int hitCol)
             // Tính tâm ô trứng (pixel)
             int baseX = container2.getX();
             int baseY = container2.getY();
-            int xOffset = (nr % 2 == 1) ? 15 : 0;
+            int xOffset = isShiftedRow(nr) ? 15 : 0;
             float cellX = baseX + nc * 30 + xOffset + 16;
             float cellY = baseY + nr * 26 + 16;
 
@@ -805,33 +880,43 @@ void Screen2View::handleCollisionWithEgg(int hitRow, int hitCol)
 void Screen2View::handleFailedAttachment(int col)
 {
     // Thử đặt ở hàng đầu
-    col = clamp(col, 0, COLS - 1);
+    const int topRowMaxCol = isShiftedRow(0) ? COLS - 2 : COLS - 1;
+    col = clamp(col, 0, topRowMaxCol);
 
     if (eggGrid[0][col] == EMPTY)
     {
-        eggGrid[0][col] = currentEggColor;
+        eggGrid[0][col] = projectileColor;
         renderEggGrid();
 
         HAL_UART_Transmit(&huart1, (uint8_t*)"Forced attach at top\r\n", 22, 100);
-        findAndRemoveMatchingGroup(0, col);
+        pendingGroupClear = true;
+        pendingRow = 0;
+        pendingCol = col;
     }
     else
     {
         // Tìm ô trống đầu tiên ở hàng đầu
         for (int c = 0; c < COLS; c++)
         {
+            if (!isValidGridPosition(0, c))
+            {
+                continue;
+            }
+
             if (eggGrid[0][c] == EMPTY)
             {
-                eggGrid[0][c] = currentEggColor;
+                eggGrid[0][c] = projectileColor;
                 renderEggGrid();
-                findAndRemoveMatchingGroup(0, c);
+                pendingGroupClear = true;
+                pendingRow = 0;
+                pendingCol = c;
                 return;
             }
         }
 
         // Nếu hàng đầu đầy - Game Over
         HAL_UART_Transmit(&huart1, (uint8_t*)"Game Over - Top row full!\r\n", 27, 100);
-        // application().gotoScreen3ScreenNoTransition();
+        triggerGameOver();
     }
 }
 
@@ -867,20 +952,243 @@ void Screen2View::findAndRemoveMatchingGroup(int row, int col)
         for(int i=0;i<6;i++)
         {
             int nr = r + dr[i];
-            int nc = c + ((r&1)? dc_odd[i] : dc_even[i]);
+            int nc = c + (isShiftedRow(r) ? dc_odd[i] : dc_even[i]);
             if(!isValidGridPosition(nr,nc) || visited[nr][nc] || eggGrid[nr][nc]!=color) continue;
             visited[nr][nc] = true;
             stackR[top] = nr; stackC[top++] = nc;
         }
     }
 
-    if(gsize >= 3)
+    const bool groupRemoved = gsize >= 3;
+    if (groupRemoved)
     {
-        for(int i=0;i<gsize;i++) eggGrid[groupR[i]][groupC[i]] = EMPTY;
-        updateScore(gsize);
+        for (int i = 0; i < gsize; ++i)
+        {
+            const int groupRow = groupR[i];
+            const int groupCol = groupC[i];
+            startPopAnimation(
+                groupRow, groupCol, eggGrid[groupRow][groupCol]);
+            eggGrid[groupRow][groupCol] = EMPTY;
+        }
+    }
+
+    // Chạy kiểm tra neo trần sau mọi lần resolve, kể cả khi phát bắn
+    // không tạo nhóm. Điều này tự sửa mọi cụm mồ côi còn sót từ state cũ.
+    const int droppedEggs = detachUnsupportedEggs();
+    if (groupRemoved || droppedEggs > 0)
+    {
+        updateScore((groupRemoved ? gsize : 0) + droppedEggs);
         renderEggGrid();
+    }
+
+    if (groupRemoved)
+    {
         Haptic_Play((gsize >= 6) ? HAPTIC_COMBO : HAPTIC_POP);
         HAL_UART_Transmit(&huart1, (uint8_t*)"Group cleared!\r\n", 16, 100);
+    }
+}
+
+void Screen2View::startPopAnimation(int row, int col, uint8_t color)
+{
+    int slot = -1;
+    for (int i = 0; i < MAX_POP_EGGS; ++i)
+    {
+        if (!popEggActive[i])
+        {
+            slot = i;
+            break;
+        }
+    }
+
+    if (slot < 0)
+    {
+        return;
+    }
+
+    switch (color)
+    {
+        case RED:    popEggImages[slot].setBitmap(BITMAP_EGG_RED_ID); break;
+        case BLUE:   popEggImages[slot].setBitmap(BITMAP_EGG_BLUE_ID); break;
+        case GREEN:  popEggImages[slot].setBitmap(BITMAP_EGG_GREEN_ID); break;
+        case YELLOW: popEggImages[slot].setBitmap(BITMAP_EGG_YELLOW_ID); break;
+        case PURPLE: popEggImages[slot].setBitmap(BITMAP_EGG_PURPLE_ID); break;
+        default: return;
+    }
+
+    const int x = col * 30 + (isShiftedRow(row) ? 15 : 0);
+    const int y = row * EGG_SPACING_Y;
+    popEggImages[slot].setXY(x, y);
+    popEggImages[slot].setAlpha(255U);
+    popEggImages[slot].setVisible(true);
+    popEggImages[slot].invalidate();
+    popEggStartTick[slot] = HAL_GetTick();
+    popEggActive[slot] = true;
+    ++activePopEggs;
+}
+
+void Screen2View::updatePopAnimations()
+{
+    const uint32_t now = HAL_GetTick();
+
+    for (int i = 0; i < MAX_POP_EGGS; ++i)
+    {
+        if (!popEggActive[i])
+        {
+            continue;
+        }
+
+        const uint32_t elapsed = now - popEggStartTick[i];
+        if (elapsed >= POP_ANIMATION_MS)
+        {
+            popEggActive[i] = false;
+            popEggImages[i].setVisible(false);
+            popEggImages[i].setAlpha(255U);
+            popEggImages[i].invalidate();
+            --activePopEggs;
+            continue;
+        }
+
+        const uint32_t remaining = POP_ANIMATION_MS - elapsed;
+        const uint8_t alpha = static_cast<uint8_t>(
+            (255U * remaining) / POP_ANIMATION_MS);
+        popEggImages[i].setAlpha(alpha);
+        popEggImages[i].invalidate();
+    }
+}
+
+int Screen2View::detachUnsupportedEggs()
+{
+    bool connected[ROWS][COLS];
+    memset(connected, 0, sizeof(connected));
+
+    const int maxEggs = ROWS * COLS;
+    int stackR[maxEggs];
+    int stackC[maxEggs];
+    int top = 0;
+
+    // Mọi quả ở hàng trên cùng đều được xem là neo vào trần.
+    for (int col = 0; col < COLS; ++col)
+    {
+        if (isValidGridPosition(0, col) && eggGrid[0][col] != EMPTY)
+        {
+            connected[0][col] = true;
+            stackR[top] = 0;
+            stackC[top++] = col;
+        }
+    }
+
+    const int dr[6] = {-1, -1, 0, 0, 1, 1};
+    const int dcEven[6] = {-1, 0, -1, 1, -1, 0};
+    const int dcOdd[6] = {0, 1, -1, 1, 0, 1};
+
+    while (top > 0)
+    {
+        --top;
+        const int row = stackR[top];
+        const int col = stackC[top];
+
+        for (int i = 0; i < 6; ++i)
+        {
+            const int nextRow = row + dr[i];
+            const int nextCol = col +
+                (isShiftedRow(row) ? dcOdd[i] : dcEven[i]);
+
+            if (!isValidGridPosition(nextRow, nextCol) ||
+                connected[nextRow][nextCol] ||
+                eggGrid[nextRow][nextCol] == EMPTY)
+            {
+                continue;
+            }
+
+            connected[nextRow][nextCol] = true;
+            stackR[top] = nextRow;
+            stackC[top++] = nextCol;
+        }
+    }
+
+    int droppedCount = 0;
+    for (int row = 0; row < ROWS; ++row)
+    {
+        for (int col = 0; col < COLS; ++col)
+        {
+            if (eggGrid[row][col] == EMPTY || connected[row][col])
+            {
+                continue;
+            }
+
+            const uint8_t color = eggGrid[row][col];
+            int slot = -1;
+            for (int i = 0; i < MAX_FALLING_EGGS; ++i)
+            {
+                if (!fallingEggActive[i])
+                {
+                    slot = i;
+                    break;
+                }
+            }
+
+            if (slot >= 0)
+            {
+                switch (color)
+                {
+                    case RED:    fallingEggImages[slot].setBitmap(BITMAP_EGG_RED_ID); break;
+                    case BLUE:   fallingEggImages[slot].setBitmap(BITMAP_EGG_BLUE_ID); break;
+                    case GREEN:  fallingEggImages[slot].setBitmap(BITMAP_EGG_GREEN_ID); break;
+                    case YELLOW: fallingEggImages[slot].setBitmap(BITMAP_EGG_YELLOW_ID); break;
+                    case PURPLE: fallingEggImages[slot].setBitmap(BITMAP_EGG_PURPLE_ID); break;
+                    default: break;
+                }
+
+                const int x = col * 30 + (isShiftedRow(row) ? 15 : 0);
+                const int y = row * EGG_SPACING_Y;
+                fallingEggY[slot] = static_cast<float>(y);
+                fallingEggVelocity[slot] = 1.5f;
+                fallingEggActive[slot] = true;
+                ++activeFallingEggs;
+
+                fallingEggImages[slot].setXY(x, y);
+                fallingEggImages[slot].setVisible(true);
+                fallingEggImages[slot].invalidate();
+            }
+
+            eggGrid[row][col] = EMPTY;
+            ++droppedCount;
+        }
+    }
+
+    return droppedCount;
+}
+
+void Screen2View::updateFallingEggs()
+{
+    const float gravity = 0.35f;
+    const float terminalVelocity = 8.0f;
+
+    for (int i = 0; i < MAX_FALLING_EGGS; ++i)
+    {
+        if (!fallingEggActive[i])
+        {
+            continue;
+        }
+
+        fallingEggVelocity[i] += gravity;
+        if (fallingEggVelocity[i] > terminalVelocity)
+        {
+            fallingEggVelocity[i] = terminalVelocity;
+        }
+
+        fallingEggY[i] += fallingEggVelocity[i];
+        if (fallingEggY[i] >= container2.getHeight())
+        {
+            fallingEggActive[i] = false;
+            fallingEggImages[i].setVisible(false);
+            fallingEggImages[i].invalidate();
+            --activeFallingEggs;
+            continue;
+        }
+
+        fallingEggImages[i].moveTo(
+            fallingEggImages[i].getX(), static_cast<int16_t>(fallingEggY[i]));
     }
 }
 
@@ -920,9 +1228,10 @@ void Screen2View::checkProjectileCollision()
     {
         for (int col = 0; col < COLS && !collided; ++col)
         {
+            if (!isValidGridPosition(row, col)) continue;
             if (eggGrid[row][col] == EMPTY) continue;
 
-            int xOffset = (row % 2 == 1) ? HEX_OFFSET : 0;
+            int xOffset = isShiftedRow(row) ? HEX_OFFSET : 0;
             int eggX = baseX + col * EGG_SPACING_X + xOffset;
             int eggY = baseY + row * EGG_SPACING_Y;
 
@@ -954,8 +1263,10 @@ void Screen2View::checkProjectileCollision()
     if (!collided && projectileY <= baseY)
     {
         float projCenterXRel = projCenterX - baseX;
-        int col = (int)(projCenterXRel / EGG_SPACING_X);
-        col = clamp(col, 0, COLS - 1);
+        const int topRowOffset = isShiftedRow(0) ? HEX_OFFSET : 0;
+        int col = (int)((projCenterXRel - topRowOffset) / EGG_SPACING_X);
+        const int topRowMaxCol = isShiftedRow(0) ? COLS - 2 : COLS - 1;
+        col = clamp(col, 0, topRowMaxCol);
 
         projectileActive = false;
         projectileImage.setVisible(false);
@@ -987,15 +1298,20 @@ void Screen2View::updateProjectileVisual()
     }
 }
 // THÊM hàm kiểm tra tính hợp lệ của grid:
-bool Screen2View::isValidGridPosition(int row, int col)
+bool Screen2View::isShiftedRow(int row) const
+{
+    return ((row + gridPhase) & 1) != 0;
+}
+
+bool Screen2View::isValidGridPosition(int row, int col) const
 {
     if (row < 0 || row >= ROWS || col < 0 || col >= COLS)
     {
         return false;
     }
 
-    // Lưới tổ ong: hàng chẵn 8 ô, hàng lẻ 7 ô lệch sang phải 15 px.
-    return !((row % 2) == 1 && col == (COLS - 1));
+    // Pha lưới đổi sau mỗi lần hạ; hàng lệch có 7 ô, hàng còn lại có 8.
+    return !(isShiftedRow(row) && col == (COLS - 1));
 }
 
 void Screen2View::debugJoystick()
