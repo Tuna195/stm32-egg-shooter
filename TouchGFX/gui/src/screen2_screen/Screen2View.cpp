@@ -640,7 +640,7 @@ bool Screen2View::shootEgg()
 
     float dirX = sin(radians);
     float dirY = -cos(radians);
-    float speed = 3.0f;
+    const float speed = 5.0f;
 
     createProjectile(startX, startY, dirX * speed, dirY * speed);
     return true;
