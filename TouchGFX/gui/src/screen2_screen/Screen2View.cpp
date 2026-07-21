@@ -45,6 +45,8 @@ Screen2View::Screen2View() : score(0), shotCount(0), gridPhase(0), droppedLineCo
     {
         popEggActive[i] = false;
         popEggStartTick[i] = 0U;
+        popEggStartX[i] = 0;
+        popEggStartY[i] = 0;
     }
 }
 
@@ -99,9 +101,12 @@ void Screen2View::setupScreen()
         for (int i = 0; i < MAX_POP_EGGS; ++i)
         {
             popEggActive[i] = false;
-            popEggImages[i].setAlpha(255U);
-            popEggImages[i].setVisible(false);
-            container2.add(popEggImages[i]);
+            popEggLeftImages[i].setAlpha(255U);
+            popEggRightImages[i].setAlpha(255U);
+            popEggLeftImages[i].setVisible(false);
+            popEggRightImages[i].setVisible(false);
+            container2.add(popEggLeftImages[i]);
+            container2.add(popEggRightImages[i]);
         }
 
 	    shotCount = 0;
@@ -411,8 +416,10 @@ void Screen2View::clearEggGrid()
     for (int i = 0; i < MAX_POP_EGGS; ++i)
     {
         popEggActive[i] = false;
-        popEggImages[i].setAlpha(255U);
-        popEggImages[i].setVisible(false);
+        popEggLeftImages[i].setAlpha(255U);
+        popEggRightImages[i].setAlpha(255U);
+        popEggLeftImages[i].setVisible(false);
+        popEggRightImages[i].setVisible(false);
     }
 }
 // Thêm vào Screen2View.cpp
@@ -1007,20 +1014,41 @@ void Screen2View::startPopAnimation(int row, int col, uint8_t color)
 
     switch (color)
     {
-        case RED:    popEggImages[slot].setBitmap(BITMAP_EGG_RED_ID); break;
-        case BLUE:   popEggImages[slot].setBitmap(BITMAP_EGG_BLUE_ID); break;
-        case GREEN:  popEggImages[slot].setBitmap(BITMAP_EGG_GREEN_ID); break;
-        case YELLOW: popEggImages[slot].setBitmap(BITMAP_EGG_YELLOW_ID); break;
-        case PURPLE: popEggImages[slot].setBitmap(BITMAP_EGG_PURPLE_ID); break;
+        case RED:
+            popEggLeftImages[slot].setBitmap(BITMAP_EGG_RED_BROKEN_LEFT_ID);
+            popEggRightImages[slot].setBitmap(BITMAP_EGG_RED_BROKEN_RIGHT_ID);
+            break;
+        case BLUE:
+            popEggLeftImages[slot].setBitmap(BITMAP_EGG_BLUE_BROKEN_LEFT_ID);
+            popEggRightImages[slot].setBitmap(BITMAP_EGG_BLUE_BROKEN_RIGHT_ID);
+            break;
+        case GREEN:
+            popEggLeftImages[slot].setBitmap(BITMAP_EGG_GREEN_BROKEN_LEFT_ID);
+            popEggRightImages[slot].setBitmap(BITMAP_EGG_GREEN_BROKEN_RIGHT_ID);
+            break;
+        case YELLOW:
+            popEggLeftImages[slot].setBitmap(BITMAP_EGG_YELLOW_BROKEN_LEFT_ID);
+            popEggRightImages[slot].setBitmap(BITMAP_EGG_YELLOW_BROKEN_RIGHT_ID);
+            break;
+        case PURPLE:
+            popEggLeftImages[slot].setBitmap(BITMAP_EGG_PURPLE_BROKEN_LEFT_ID);
+            popEggRightImages[slot].setBitmap(BITMAP_EGG_PURPLE_BROKEN_RIGHT_ID);
+            break;
         default: return;
     }
 
     const int x = col * 30 + (isShiftedRow(row) ? 15 : 0);
     const int y = row * EGG_SPACING_Y;
-    popEggImages[slot].setXY(x, y);
-    popEggImages[slot].setAlpha(255U);
-    popEggImages[slot].setVisible(true);
-    popEggImages[slot].invalidate();
+    popEggStartX[slot] = static_cast<int16_t>(x);
+    popEggStartY[slot] = static_cast<int16_t>(y);
+    popEggLeftImages[slot].setXY(x, y);
+    popEggRightImages[slot].setXY(x, y);
+    popEggLeftImages[slot].setAlpha(255U);
+    popEggRightImages[slot].setAlpha(255U);
+    popEggLeftImages[slot].setVisible(true);
+    popEggRightImages[slot].setVisible(true);
+    popEggLeftImages[slot].invalidate();
+    popEggRightImages[slot].invalidate();
     popEggStartTick[slot] = HAL_GetTick();
     popEggActive[slot] = true;
     ++activePopEggs;
@@ -1041,18 +1069,38 @@ void Screen2View::updatePopAnimations()
         if (elapsed >= POP_ANIMATION_MS)
         {
             popEggActive[i] = false;
-            popEggImages[i].setVisible(false);
-            popEggImages[i].setAlpha(255U);
-            popEggImages[i].invalidate();
+            popEggLeftImages[i].setVisible(false);
+            popEggRightImages[i].setVisible(false);
+            popEggLeftImages[i].setAlpha(255U);
+            popEggRightImages[i].setAlpha(255U);
+            popEggLeftImages[i].invalidate();
+            popEggRightImages[i].invalidate();
             --activePopEggs;
             continue;
         }
 
-        const uint32_t remaining = POP_ANIMATION_MS - elapsed;
-        const uint8_t alpha = static_cast<uint8_t>(
-            (255U * remaining) / POP_ANIMATION_MS);
-        popEggImages[i].setAlpha(alpha);
-        popEggImages[i].invalidate();
+        const int separation = 2 + static_cast<int>((12U * elapsed) / POP_ANIMATION_MS);
+        const int drop = 2 + static_cast<int>(
+            (18U * elapsed * elapsed) /
+            (POP_ANIMATION_MS * POP_ANIMATION_MS));
+
+        popEggLeftImages[i].moveTo(
+            popEggStartX[i] - separation, popEggStartY[i] + drop);
+        popEggRightImages[i].moveTo(
+            popEggStartX[i] + separation, popEggStartY[i] + drop + 1);
+
+        const uint32_t fadeStart = (POP_ANIMATION_MS * 3U) / 5U;
+        uint8_t alpha = 255U;
+        if (elapsed > fadeStart)
+        {
+            alpha = static_cast<uint8_t>(
+                (255U * (POP_ANIMATION_MS - elapsed)) /
+                (POP_ANIMATION_MS - fadeStart));
+        }
+        popEggLeftImages[i].setAlpha(alpha);
+        popEggRightImages[i].setAlpha(alpha);
+        popEggLeftImages[i].invalidate();
+        popEggRightImages[i].invalidate();
     }
 }
 
