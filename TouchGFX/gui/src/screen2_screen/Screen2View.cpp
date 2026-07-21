@@ -39,6 +39,13 @@ Screen2View::Screen2View() : score(0), shotCount(0), droppedLineCount(0),
         fallingEggY[i] = 0.0f;
         fallingEggVelocity[i] = 0.0f;
     }
+
+    activePopEggs = 0;
+    for (int i = 0; i < MAX_POP_EGGS; ++i)
+    {
+        popEggActive[i] = false;
+        popEggStartTick[i] = 0U;
+    }
 }
 
 // CÁCH 2: DI CHUYỂN WIDGET ĐÚNG CÁCH
@@ -86,6 +93,15 @@ void Screen2View::setupScreen()
             fallingEggActive[i] = false;
             fallingEggImages[i].setVisible(false);
             container2.add(fallingEggImages[i]);
+        }
+
+        activePopEggs = 0;
+        for (int i = 0; i < MAX_POP_EGGS; ++i)
+        {
+            popEggActive[i] = false;
+            popEggImages[i].setAlpha(255U);
+            popEggImages[i].setVisible(false);
+            container2.add(popEggImages[i]);
         }
 
 	    shotCount = 0;
@@ -382,6 +398,15 @@ void Screen2View::clearEggGrid()
         fallingEggActive[i] = false;
         fallingEggImages[i].setVisible(false);
     }
+
+
+    activePopEggs = 0;
+    for (int i = 0; i < MAX_POP_EGGS; ++i)
+    {
+        popEggActive[i] = false;
+        popEggImages[i].setAlpha(255U);
+        popEggImages[i].setVisible(false);
+    }
 }
 // Thêm vào Screen2View.cpp
 
@@ -516,6 +541,7 @@ void Screen2View::handleTickEvent()
     updateAimDirection();
     updateProjectile();
     updateFallingEggs();
+    updatePopAnimations();
     debugAiming();  // THÊM dòng này để debug
     if (pendingGroupClear)
     {
@@ -643,7 +669,8 @@ bool Screen2View::shootEgg()
 {
     // Một lần chỉ có một projectile. Sau va chạm, tiếp tục khóa cho tới
     // khi nhóm đã được xử lý và quả kế tiếp đã được sinh.
-    if (projectileActive || pendingGroupClear || activeFallingEggs > 0)
+    if (projectileActive || pendingGroupClear ||
+        activeFallingEggs > 0 || activePopEggs > 0)
     {
         return false;
     }
@@ -938,12 +965,87 @@ void Screen2View::findAndRemoveMatchingGroup(int row, int col)
 
     if(gsize >= 3)
     {
-        for(int i=0;i<gsize;i++) eggGrid[groupR[i]][groupC[i]] = EMPTY;
+        for (int i = 0; i < gsize; ++i)
+        {
+            const int groupRow = groupR[i];
+            const int groupCol = groupC[i];
+            startPopAnimation(
+                groupRow, groupCol, eggGrid[groupRow][groupCol]);
+            eggGrid[groupRow][groupCol] = EMPTY;
+        }
         const int droppedEggs = detachUnsupportedEggs();
         updateScore(gsize + droppedEggs);
         renderEggGrid();
         Haptic_Play((gsize >= 6) ? HAPTIC_COMBO : HAPTIC_POP);
         HAL_UART_Transmit(&huart1, (uint8_t*)"Group cleared!\r\n", 16, 100);
+    }
+}
+
+void Screen2View::startPopAnimation(int row, int col, uint8_t color)
+{
+    int slot = -1;
+    for (int i = 0; i < MAX_POP_EGGS; ++i)
+    {
+        if (!popEggActive[i])
+        {
+            slot = i;
+            break;
+        }
+    }
+
+    if (slot < 0)
+    {
+        return;
+    }
+
+    switch (color)
+    {
+        case RED:    popEggImages[slot].setBitmap(BITMAP_EGG_RED_ID); break;
+        case BLUE:   popEggImages[slot].setBitmap(BITMAP_EGG_BLUE_ID); break;
+        case GREEN:  popEggImages[slot].setBitmap(BITMAP_EGG_GREEN_ID); break;
+        case YELLOW: popEggImages[slot].setBitmap(BITMAP_EGG_YELLOW_ID); break;
+        case PURPLE: popEggImages[slot].setBitmap(BITMAP_EGG_PURPLE_ID); break;
+        default: return;
+    }
+
+    const int x = col * 30 + ((row & 1) ? 15 : 0);
+    const int y = row * EGG_SPACING_Y;
+    popEggImages[slot].setXY(x, y);
+    popEggImages[slot].setAlpha(255U);
+    popEggImages[slot].setVisible(true);
+    popEggImages[slot].invalidate();
+    popEggStartTick[slot] = HAL_GetTick();
+    popEggActive[slot] = true;
+    ++activePopEggs;
+}
+
+void Screen2View::updatePopAnimations()
+{
+    const uint32_t now = HAL_GetTick();
+
+    for (int i = 0; i < MAX_POP_EGGS; ++i)
+    {
+        if (!popEggActive[i])
+        {
+            continue;
+        }
+
+        const uint32_t elapsed = now - popEggStartTick[i];
+        if (elapsed >= POP_ANIMATION_MS)
+        {
+            popEggActive[i] = false;
+            popEggImages[i].setVisible(false);
+            popEggImages[i].setAlpha(255U);
+            popEggImages[i].invalidate();
+            --activePopEggs;
+            continue;
+        }
+
+        const uint32_t remaining = POP_ANIMATION_MS - elapsed;
+        const uint8_t alpha = static_cast<uint8_t>(
+            (255U * remaining) / POP_ANIMATION_MS);
+        popEggImages[i].setAlpha(alpha);
+        popEggImages[i].invalidate();
     }
 }
 

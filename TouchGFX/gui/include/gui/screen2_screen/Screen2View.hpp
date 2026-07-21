@@ -49,6 +49,12 @@ private:
     float fallingEggVelocity[MAX_FALLING_EGGS];
     bool fallingEggActive[MAX_FALLING_EGGS];
     int activeFallingEggs;
+    static const int MAX_POP_EGGS = ROWS * COLS;
+    static const uint32_t POP_ANIMATION_MS = 160U;
+    touchgfx::Image popEggImages[MAX_POP_EGGS];
+    uint32_t popEggStartTick[MAX_POP_EGGS];
+    bool popEggActive[MAX_POP_EGGS];
+    int activePopEggs;
     int score;
     Unicode::UnicodeChar scoreBuffer[10];
     int shotCount;
@@ -111,6 +117,8 @@ private:
     void findAndRemoveMatchingGroup(int row, int col);
     int detachUnsupportedEggs();
     void updateFallingEggs();
+    void startPopAnimation(int row, int col, uint8_t color);
+    void updatePopAnimations();
     void debugJoystick();
     void debugAiming();
     void smoothAngleToTarget();
