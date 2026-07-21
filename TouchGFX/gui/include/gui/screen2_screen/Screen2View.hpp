@@ -43,6 +43,12 @@ private:
     uint8_t eggGrid[ROWS][COLS];
     touchgfx::Image eggImages[ROWS][COLS];
     touchgfx::Box dangerLine;
+    static const int MAX_FALLING_EGGS = ROWS * COLS;
+    touchgfx::Image fallingEggImages[MAX_FALLING_EGGS];
+    float fallingEggY[MAX_FALLING_EGGS];
+    float fallingEggVelocity[MAX_FALLING_EGGS];
+    bool fallingEggActive[MAX_FALLING_EGGS];
+    int activeFallingEggs;
     int score;
     Unicode::UnicodeChar scoreBuffer[10];
     int shotCount;
@@ -103,6 +109,8 @@ private:
     // Thêm đúng tham số khớp với .cpp
     void handleCollisionWithEgg(int hitRow, int hitCol);
     void findAndRemoveMatchingGroup(int row, int col);
+    int detachUnsupportedEggs();
+    void updateFallingEggs();
     void debugJoystick();
     void debugAiming();
     void smoothAngleToTarget();

@@ -31,6 +31,14 @@ Screen2View::Screen2View() : score(0), shotCount(0), droppedLineCount(0),
             eggGrid[i][j] = EMPTY;
         }
     }
+
+    activeFallingEggs = 0;
+    for (int i = 0; i < MAX_FALLING_EGGS; ++i)
+    {
+        fallingEggActive[i] = false;
+        fallingEggY[i] = 0.0f;
+        fallingEggVelocity[i] = 0.0f;
+    }
 }
 
 // CÁCH 2: DI CHUYỂN WIDGET ĐÚNG CÁCH
@@ -71,6 +79,14 @@ void Screen2View::setupScreen()
 	            container2.add(eggImages[row][col]);
 	        }
 	    }
+
+        activeFallingEggs = 0;
+        for (int i = 0; i < MAX_FALLING_EGGS; ++i)
+        {
+            fallingEggActive[i] = false;
+            fallingEggImages[i].setVisible(false);
+            container2.add(fallingEggImages[i]);
+        }
 
 	    shotCount = 0;
 	    droppedLineCount = 0;
@@ -359,6 +375,13 @@ void Screen2View::clearEggGrid()
             eggGrid[row][col] = EMPTY;
         }
     }
+
+    activeFallingEggs = 0;
+    for (int i = 0; i < MAX_FALLING_EGGS; ++i)
+    {
+        fallingEggActive[i] = false;
+        fallingEggImages[i].setVisible(false);
+    }
 }
 // Thêm vào Screen2View.cpp
 
@@ -492,6 +515,7 @@ void Screen2View::handleTickEvent()
 {
     updateAimDirection();
     updateProjectile();
+    updateFallingEggs();
     debugAiming();  // THÊM dòng này để debug
     if (pendingGroupClear)
     {
@@ -619,7 +643,7 @@ bool Screen2View::shootEgg()
 {
     // Một lần chỉ có một projectile. Sau va chạm, tiếp tục khóa cho tới
     // khi nhóm đã được xử lý và quả kế tiếp đã được sinh.
-    if (projectileActive || pendingGroupClear)
+    if (projectileActive || pendingGroupClear || activeFallingEggs > 0)
     {
         return false;
     }
@@ -915,10 +939,146 @@ void Screen2View::findAndRemoveMatchingGroup(int row, int col)
     if(gsize >= 3)
     {
         for(int i=0;i<gsize;i++) eggGrid[groupR[i]][groupC[i]] = EMPTY;
-        updateScore(gsize);
+        const int droppedEggs = detachUnsupportedEggs();
+        updateScore(gsize + droppedEggs);
         renderEggGrid();
         Haptic_Play((gsize >= 6) ? HAPTIC_COMBO : HAPTIC_POP);
         HAL_UART_Transmit(&huart1, (uint8_t*)"Group cleared!\r\n", 16, 100);
+    }
+}
+
+int Screen2View::detachUnsupportedEggs()
+{
+    bool connected[ROWS][COLS];
+    memset(connected, 0, sizeof(connected));
+
+    const int maxEggs = ROWS * COLS;
+    int stackR[maxEggs];
+    int stackC[maxEggs];
+    int top = 0;
+
+    // Mọi quả ở hàng trên cùng đều được xem là neo vào trần.
+    for (int col = 0; col < COLS; ++col)
+    {
+        if (eggGrid[0][col] != EMPTY)
+        {
+            connected[0][col] = true;
+            stackR[top] = 0;
+            stackC[top++] = col;
+        }
+    }
+
+    const int dr[6] = {-1, -1, 0, 0, 1, 1};
+    const int dcEven[6] = {-1, 0, -1, 1, -1, 0};
+    const int dcOdd[6] = {0, 1, -1, 1, 0, 1};
+
+    while (top > 0)
+    {
+        --top;
+        const int row = stackR[top];
+        const int col = stackC[top];
+
+        for (int i = 0; i < 6; ++i)
+        {
+            const int nextRow = row + dr[i];
+            const int nextCol = col + ((row & 1) ? dcOdd[i] : dcEven[i]);
+
+            if (!isValidGridPosition(nextRow, nextCol) ||
+                connected[nextRow][nextCol] ||
+                eggGrid[nextRow][nextCol] == EMPTY)
+            {
+                continue;
+            }
+
+            connected[nextRow][nextCol] = true;
+            stackR[top] = nextRow;
+            stackC[top++] = nextCol;
+        }
+    }
+
+    int droppedCount = 0;
+    for (int row = 1; row < ROWS; ++row)
+    {
+        for (int col = 0; col < COLS; ++col)
+        {
+            if (eggGrid[row][col] == EMPTY || connected[row][col])
+            {
+                continue;
+            }
+
+            const uint8_t color = eggGrid[row][col];
+            int slot = -1;
+            for (int i = 0; i < MAX_FALLING_EGGS; ++i)
+            {
+                if (!fallingEggActive[i])
+                {
+                    slot = i;
+                    break;
+                }
+            }
+
+            if (slot >= 0)
+            {
+                switch (color)
+                {
+                    case RED:    fallingEggImages[slot].setBitmap(BITMAP_EGG_RED_ID); break;
+                    case BLUE:   fallingEggImages[slot].setBitmap(BITMAP_EGG_BLUE_ID); break;
+                    case GREEN:  fallingEggImages[slot].setBitmap(BITMAP_EGG_GREEN_ID); break;
+                    case YELLOW: fallingEggImages[slot].setBitmap(BITMAP_EGG_YELLOW_ID); break;
+                    case PURPLE: fallingEggImages[slot].setBitmap(BITMAP_EGG_PURPLE_ID); break;
+                    default: break;
+                }
+
+                const int x = col * 30 + ((row & 1) ? 15 : 0);
+                const int y = row * EGG_SPACING_Y;
+                fallingEggY[slot] = static_cast<float>(y);
+                fallingEggVelocity[slot] = 1.5f;
+                fallingEggActive[slot] = true;
+                ++activeFallingEggs;
+
+                fallingEggImages[slot].setXY(x, y);
+                fallingEggImages[slot].setVisible(true);
+                fallingEggImages[slot].invalidate();
+            }
+
+            eggGrid[row][col] = EMPTY;
+            ++droppedCount;
+        }
+    }
+
+    return droppedCount;
+}
+
+void Screen2View::updateFallingEggs()
+{
+    const float gravity = 0.35f;
+    const float terminalVelocity = 8.0f;
+
+    for (int i = 0; i < MAX_FALLING_EGGS; ++i)
+    {
+        if (!fallingEggActive[i])
+        {
+            continue;
+        }
+
+        fallingEggVelocity[i] += gravity;
+        if (fallingEggVelocity[i] > terminalVelocity)
+        {
+            fallingEggVelocity[i] = terminalVelocity;
+        }
+
+        fallingEggY[i] += fallingEggVelocity[i];
+        if (fallingEggY[i] >= container2.getHeight())
+        {
+            fallingEggActive[i] = false;
+            fallingEggImages[i].setVisible(false);
+            fallingEggImages[i].invalidate();
+            --activeFallingEggs;
+            continue;
+        }
+
+        fallingEggImages[i].moveTo(
+            fallingEggImages[i].getX(), static_cast<int16_t>(fallingEggY[i]));
     }
 }
 
