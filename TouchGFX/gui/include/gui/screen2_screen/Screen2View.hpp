@@ -6,8 +6,7 @@
 #include <touchgfx/widgets/Image.hpp>
 #include <touchgfx/Color.hpp>
 
-#define ROWS 5
-#define VISIBLE_ROWS 5
+#define ROWS 8
 #define COLS 8
 #define EMPTY 0
 #define RED 1
@@ -36,21 +35,25 @@ protected:
     void clearEggGrid();
     void ensureMatchablePattern();
     void dropEggGrid();
-    bool hasEggBelowVisible() const;
+    bool hasEggCrossedDangerLine() const;
     void addNewTopRow();
     void notifyGameOver();
 
 private:
     uint8_t eggGrid[ROWS][COLS];
     touchgfx::Image eggImages[ROWS][COLS];
+    touchgfx::Box dangerLine;
     int score;
     Unicode::UnicodeChar scoreBuffer[10];
     int shotCount;
     static const int SHOTS_BEFORE_DROP = 5;
     void onEggShot();
     bool checkGameOver();
-    bool checkBottomRowOccupied();
     void triggerGameOver();
+
+    static const int EGG_HEIGHT = 32;
+    static const int EGG_SPACING_Y = 26;
+    static const int DANGER_LINE_Y = 220;
 
     // Biến joystick
     int16_t joystickX, joystickY;

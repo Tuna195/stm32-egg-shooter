@@ -21,6 +21,10 @@ Screen2View::Screen2View() : score(0), shotCount(0), droppedLineCount(0),
                            targetAngle(0), currentAngleFloat(0),
                            isAiming(false), lastAimTime(0)
 {
+    dangerLine.setPosition(0, DANGER_LINE_Y, 240, 2);
+    dangerLine.setColor(touchgfx::Color::getColorFromRGB(255, 48, 48));
+    add(dangerLine);
+
     // Khởi tạo mảng eggGrid
     for(int i = 0; i < ROWS; i++) {
         for(int j = 0; j < COLS; j++) {
@@ -212,12 +216,11 @@ void Screen2View::onEggShot()
         dropEggGrid();
         shotCount = 0; // Reset counter
 
-//        // Kiểm tra game over
-//        if(checkGameOver())
-//        {
-//
-//            return;
-//        }
+        if (hasEggCrossedDangerLine())
+        {
+            triggerGameOver();
+            return;
+        }
     }
 
     // Spawn trứng mới cho lần bắn tiếp theo
@@ -225,13 +228,28 @@ void Screen2View::onEggShot()
 }
 
 
-/** Trả về true nếu trứng đã chạm hàng cuối của vùng chơi. */
-bool Screen2View::hasEggBelowVisible() const
+/** Trả về true nếu mép dưới của bất kỳ trứng nào chạm danger line. */
+bool Screen2View::hasEggCrossedDangerLine() const
 {
-    const int bottomVisibleRow = VISIBLE_ROWS - 1;
-    for (int col = 0; col < COLS; ++col)
-        if (eggGrid[bottomVisibleRow][col] != EMPTY)
-            return true;
+    const int gridTopY = container2.getY();
+
+    for (int row = 0; row < ROWS; ++row)
+    {
+        const int eggBottomY = gridTopY + row * EGG_SPACING_Y + EGG_HEIGHT;
+        if (eggBottomY < DANGER_LINE_Y)
+        {
+            continue;
+        }
+
+        for (int col = 0; col < COLS; ++col)
+        {
+            if (eggGrid[row][col] != EMPTY)
+            {
+                return true;
+            }
+        }
+    }
+
     return false;
 }
 
@@ -257,13 +275,8 @@ void Screen2View::dropEggGrid()
     // Thêm hàng mới ở trên (có thể random hoặc theo pattern)
     addNewTopRow();
 
-    // Render lại
+    // Render lại; onEggShot() sẽ kiểm tra danger line sau khi hạ lưới.
     renderEggGrid();
-
-	if(hasEggBelowVisible())
-	{
-		triggerGameOver();
-	}
 }
 
 void Screen2View::addNewTopRow()
@@ -276,14 +289,6 @@ void Screen2View::addNewTopRow()
         eggGrid[0][col] = randomColor(); // Luôn có trứng ở mỗi ô
     }
 }
-bool Screen2View::checkBottomRowOccupied()
-{
-    for(int col = 0; col < COLS; ++col)
-        if(eggGrid[ROWS - 1][col] != EMPTY)
-            return true;
-    return false;
-}
-
 /* Hàm dùng chung để đóng game và nhảy màn */
 void Screen2View::triggerGameOver()
 {
@@ -294,8 +299,9 @@ void Screen2View::triggerGameOver()
     projectileImage.setVisible(false);
     projectileImage.invalidate();
 
-    HAL_UART_Transmit(&huart1,
-        (uint8_t*)"GAME OVER – drop > 5!\r\n", 24, 100);
+    const char* gameOverMessage = "GAME OVER - danger line crossed!\r\n";
+    HAL_UART_Transmit(&huart1, (uint8_t*)gameOverMessage,
+        strlen(gameOverMessage), 100);
 
     notifyGameOver();
 }
@@ -305,25 +311,7 @@ void Screen2View::notifyGameOver()
 }
 bool Screen2View::checkGameOver()
 {
-    // Kiểm tra xem có trứng nào ở hàng cuối không
-    for(int col = 0; col < COLS; col++)
-    {
-        if(eggGrid[ROWS - 1][col] != EMPTY)
-        {
-            return true; // Game Over!
-        }
-    }
-
-    // Hoặc kiểm tra xem có trứng nào quá gần đường bắn không
-    for(int col = 0; col < COLS; col++)
-    {
-        if(eggGrid[ROWS - 2][col] != EMPTY) // Hàng áp cuối
-        {
-            return true; // Sắp Game Over
-        }
-    }
-
-    return false;
+    return hasEggCrossedDangerLine();
 }
 
 
@@ -506,6 +494,14 @@ void Screen2View::handleTickEvent()
     {
         pendingGroupClear = false; // Đánh dấu đã xử lý
         findAndRemoveMatchingGroup(pendingRow, pendingCol);
+
+        // Cho phép nhóm vừa tạo được xóa trước; chỉ game-over nếu sau đó
+        // vẫn còn trứng chạm hoặc vượt qua danger line.
+        if (hasEggCrossedDangerLine())
+        {
+            triggerGameOver();
+            return;
+        }
 
         // Sau khi xử lý xong, tạo quả mới
         onEggShot();
@@ -858,7 +854,7 @@ void Screen2View::handleFailedAttachment(int col)
 
         // Nếu hàng đầu đầy - Game Over
         HAL_UART_Transmit(&huart1, (uint8_t*)"Game Over - Top row full!\r\n", 27, 100);
-        // application().gotoScreen3ScreenNoTransition();
+        triggerGameOver();
     }
 }
 
