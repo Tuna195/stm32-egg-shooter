@@ -2,6 +2,7 @@
 #include <images/BitmapDatabase.hpp>
 #include <touchgfx/Unicode.hpp>
 #include "main.h"
+#include "haptic.h"
 #include <cmath>
 #include <cstdio>   // để dùng snprintf
 #include <cstring>  // để dùng strlen
@@ -214,6 +215,8 @@ bool Screen2View::hasEggBelowVisible() const
 
 void Screen2View::dropEggGrid()
 {
+    Haptic_Play(HAPTIC_WARNING);
+
     // Di chuyển tất cả trứng xuống 1 hàng
     for(int row = ROWS - 1; row > 0; row--)
     {
@@ -256,6 +259,8 @@ bool Screen2View::checkBottomRowOccupied()
 /* Hàm dùng chung để đóng game và nhảy màn */
 void Screen2View::triggerGameOver()
 {
+    Haptic_Play(HAPTIC_GAMEOVER);
+
     // Tắt viên đạn đang bay (nếu có)
     projectileActive = false;
     projectileImage.setVisible(false);
@@ -405,10 +410,8 @@ void Screen2View::updateJoystickInput()
         // Gọi chức năng bắn
         shootEgg();
 
-        // Bật buzzer (PD12) trong thời gian ngắn
-        HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_SET); // Buzzer ON
-        HAL_Delay(50); // kêu 50ms
-        HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_RESET); // Buzzer OFF
+        // Rung bất đồng bộ; không chặn GUI/game loop.
+        Haptic_Play(HAPTIC_SHOOT);
 
         // Debug UART nếu cần
         const char* beepMsg = "Beep!\r\n";
@@ -868,6 +871,7 @@ void Screen2View::findAndRemoveMatchingGroup(int row, int col)
         for(int i=0;i<gsize;i++) eggGrid[groupR[i]][groupC[i]] = EMPTY;
         updateScore(gsize);
         renderEggGrid();
+        Haptic_Play((gsize >= 6) ? HAPTIC_COMBO : HAPTIC_POP);
         HAL_UART_Transmit(&huart1, (uint8_t*)"Group cleared!\r\n", 16, 100);
     }
 }
