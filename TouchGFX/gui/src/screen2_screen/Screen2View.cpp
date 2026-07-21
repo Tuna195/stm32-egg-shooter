@@ -93,7 +93,8 @@ void Screen2View::initEggGrid()
 
     for(int row = 0; row < 2; row++) // 3 hàng đầu
     {
-        int maxCols = COLS;
+        // Hàng chẵn có 8 quả; hàng lẻ có 7 quả và lệch nửa ô.
+        int maxCols = COLS - (row % 2);
 
         // Căn giữa các trứng trong hàng
         int startCol = (COLS - maxCols) / 2;
@@ -134,16 +135,16 @@ void Screen2View::ensureMatchablePattern()
 
 void Screen2View::renderEggGrid()
 {
-    // Lấy vị trí của box2 để làm offset
-    int baseX = container2.getX();
-    int baseY = container2.getY();
+    // eggImages là con của container2 nên dùng tọa độ cục bộ của container.
+    const int baseX = 0;
+    const int baseY = 0;
 
     // Kích thước trứng và khoảng cách
     const int EGG_WIDTH = 32;
     const int EGG_HEIGHT = 32;
-    const int EGG_SPACING_X = 36; // Khoảng cách ngang
-    const int EGG_SPACING_Y = 31; // Khoảng cách dọc (nhỏ hơn để tạo hiệu ứng chồng lên)
-    const int HEX_OFFSET = 18;    // Offset cho hàng lẻ tạo pattern hexagonal
+    const int EGG_SPACING_X = 30; // Trứng tròn chạm sát nhau theo chiều ngang
+    const int EGG_SPACING_Y = 26; // Khoảng cách chuẩn gần đúng của lưới tổ ong
+    const int HEX_OFFSET = 15;    // Nửa bước ngang cho hàng lẻ
 
     for(int row = 0; row < ROWS; row++)
     {
@@ -204,11 +205,12 @@ void Screen2View::onEggShot()
 }
 
 
-/** Trả về true nếu hàng ngay dưới vùng hiển thị (index = 5) có trứng */
+/** Trả về true nếu trứng đã chạm hàng cuối của vùng chơi. */
 bool Screen2View::hasEggBelowVisible() const
 {
+    const int bottomVisibleRow = VISIBLE_ROWS - 1;
     for (int col = 0; col < COLS; ++col)
-        if (eggGrid[VISIBLE_ROWS][col] != EMPTY)
+        if (eggGrid[bottomVisibleRow][col] != EMPTY)
             return true;
     return false;
 }
@@ -223,6 +225,12 @@ void Screen2View::dropEggGrid()
         for(int col = 0; col < COLS; col++)
         {
             eggGrid[row][col] = eggGrid[row - 1][col];
+        }
+
+        // Hàng lẻ chỉ có 7 ô hợp lệ.
+        if ((row % 2) == 1)
+        {
+            eggGrid[row][COLS - 1] = EMPTY;
         }
     }
 
@@ -740,9 +748,9 @@ void Screen2View::handleCollisionWithEgg(int hitRow, int hitCol)
             // Tính tâm ô trứng (pixel)
             int baseX = container2.getX();
             int baseY = container2.getY();
-            int xOffset = (nr % 2 == 1) ? 18 : 0;
-            float cellX = baseX + nc * 36 + xOffset + 16;
-            float cellY = baseY + nr * 31 + 16;
+            int xOffset = (nr % 2 == 1) ? 15 : 0;
+            float cellX = baseX + nc * 30 + xOffset + 16;
+            float cellY = baseY + nr * 26 + 16;
 
             float dx = projectileX - cellX;
             float dy = projectileY - cellY;
@@ -892,9 +900,9 @@ void Screen2View::checkProjectileCollision()
 
     const int EGG_WIDTH = 32;
     const int EGG_HEIGHT = 32;
-    const int EGG_SPACING_X = 36;
-    const int EGG_SPACING_Y = 31;
-    const int HEX_OFFSET = 18;
+    const int EGG_SPACING_X = 30;
+    const int EGG_SPACING_Y = 26;
+    const int HEX_OFFSET = 15;
 
     int baseX = container2.getX();
     int baseY = container2.getY();
@@ -902,7 +910,8 @@ void Screen2View::checkProjectileCollision()
     float projCenterX = projectileX;
     float projCenterY = projectileY;
 
-    const float collisionRadius = 50.0f;
+    // Hai sprite tròn đường kính khoảng 30 px vừa chạm nhau ở khoảng cách này.
+    const float collisionRadius = 30.0f;
     const float collisionRadiusSquared = collisionRadius * collisionRadius;
 
     bool collided = false;
@@ -980,7 +989,13 @@ void Screen2View::updateProjectileVisual()
 // THÊM hàm kiểm tra tính hợp lệ của grid:
 bool Screen2View::isValidGridPosition(int row, int col)
 {
-    return (row >= 0 && row < ROWS && col >= 0 && col < COLS);
+    if (row < 0 || row >= ROWS || col < 0 || col >= COLS)
+    {
+        return false;
+    }
+
+    // Lưới tổ ong: hàng chẵn 8 ô, hàng lẻ 7 ô lệch sang phải 15 px.
+    return !((row % 2) == 1 && col == (COLS - 1));
 }
 
 void Screen2View::debugJoystick()

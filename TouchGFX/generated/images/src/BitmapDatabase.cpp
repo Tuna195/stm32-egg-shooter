@@ -19,11 +19,11 @@ const touchgfx::Bitmap::BitmapData bitmap_database[] = {
     { image_alternate_theme_images_widgets_button_regular_height_50_tiny_round_action, 0, 110, 50, 13, 3, 84, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 44, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
     { image_alternate_theme_images_widgets_button_regular_height_50_tiny_round_pressed, 0, 110, 50, 13, 3, 84, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 44, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
     { image_cannon, 0, 320, 448, 78, 5, 165, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 387, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
-    { image_egg_blue, 0, 32, 32, 5, 5, 22, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 22, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
-    { image_egg_green, 0, 32, 32, 5, 5, 22, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 22, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
-    { image_egg_purple, 0, 32, 32, 5, 5, 22, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 22, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
-    { image_egg_red, 0, 32, 32, 5, 5, 22, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 22, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
-    { image_egg_yellow, 0, 32, 32, 5, 5, 22, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 22, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
+    { image_egg_blue, 0, 32, 32, 0, 0, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
+    { image_egg_green, 0, 32, 32, 0, 0, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
+    { image_egg_purple, 0, 32, 32, 0, 0, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
+    { image_egg_red, 0, 32, 32, 0, 0, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
+    { image_egg_yellow, 0, 32, 32, 0, 0, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
     { image_pause_button, 0, 400, 400, 0, 0, 400, ((uint8_t)touchgfx::Bitmap::RGB565) >> 3, 400, ((uint8_t)touchgfx::Bitmap::RGB565) & 0x7 },
     { image_screen1, 0, 192, 192, 0, 0, 192, ((uint8_t)touchgfx::Bitmap::RGB565) >> 3, 192, ((uint8_t)touchgfx::Bitmap::RGB565) & 0x7 }
 };
