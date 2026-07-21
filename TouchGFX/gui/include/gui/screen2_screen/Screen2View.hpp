@@ -58,6 +58,7 @@ private:
     int score;
     Unicode::UnicodeChar scoreBuffer[10];
     int shotCount;
+    int gridPhase;
     static const int SHOTS_BEFORE_DROP = 5;
     void onEggShot();
     bool checkGameOver();
@@ -127,7 +128,8 @@ private:
     int16_t  applySmoothCurve(int16_t value, int16_t maxRange);
     int getCannonBaseX();
     int getCannonBaseY();
-    bool isValidGridPosition(int row, int col);
+    bool isShiftedRow(int row) const;
+    bool isValidGridPosition(int row, int col) const;
     void forceResetGame();
     // THÊM CÁC BIẾN MỚI CHO SMOOTH AIMING:
         float targetAngle;        // Góc đích muốn đạt tới

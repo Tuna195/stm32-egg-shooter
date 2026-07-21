@@ -17,7 +17,7 @@ T clamp(T value, T minVal, T maxVal)
     return value;
 }
 
-Screen2View::Screen2View() : score(0), shotCount(0), droppedLineCount(0),
+Screen2View::Screen2View() : score(0), shotCount(0), gridPhase(0), droppedLineCount(0),
                            targetAngle(0), currentAngleFloat(0),
                            isAiming(false), lastAimTime(0)
 {
@@ -105,6 +105,7 @@ void Screen2View::setupScreen()
         }
 
 	    shotCount = 0;
+	    gridPhase = 0;
 	    droppedLineCount = 0;
 	    aimAngle = 0;
 	    projectileActive = false;
@@ -152,7 +153,7 @@ void Screen2View::initEggGrid()
     for(int row = 0; row < 2; row++) // 3 hàng đầu
     {
         // Hàng chẵn có 8 quả; hàng lẻ có 7 quả và lệch nửa ô.
-        int maxCols = COLS - (row % 2);
+        int maxCols = COLS - (isShiftedRow(row) ? 1 : 0);
 
         // Căn giữa các trứng trong hàng
         int startCol = (COLS - maxCols) / 2;
@@ -208,6 +209,12 @@ void Screen2View::renderEggGrid()
     {
         for(int col = 0; col < COLS; col++)
         {
+            if (!isValidGridPosition(row, col))
+            {
+                eggImages[row][col].setVisible(false);
+                continue;
+            }
+
             if(eggGrid[row][col] != EMPTY)
             {
                 // Chọn bitmap theo màu
@@ -221,7 +228,7 @@ void Screen2View::renderEggGrid()
                 }
 
                 // Tính toán vị trí hexagonal pattern
-                int xOffset = (row % 2 == 1) ? HEX_OFFSET : 0; // Hàng lẻ lệch phải
+                int xOffset = isShiftedRow(row) ? HEX_OFFSET : 0;
                 int x = baseX + col * EGG_SPACING_X + xOffset;
                 int y = baseY + row * EGG_SPACING_Y;
 
@@ -277,7 +284,7 @@ bool Screen2View::hasEggCrossedDangerLine() const
 
         for (int col = 0; col < COLS; ++col)
         {
-            if (eggGrid[row][col] != EMPTY)
+            if (isValidGridPosition(row, col) && eggGrid[row][col] != EMPTY)
             {
                 return true;
             }
@@ -298,13 +305,11 @@ void Screen2View::dropEggGrid()
         {
             eggGrid[row][col] = eggGrid[row - 1][col];
         }
-
-        // Hàng lẻ chỉ có 7 ô hợp lệ.
-        if ((row % 2) == 1)
-        {
-            eggGrid[row][COLS - 1] = EMPTY;
-        }
     }
+
+    // Đảo pha khi hạ lưới để một hàng 8 ô vẫn là hàng 8 ô tại vị trí
+    // mới. Nếu không, col cuối sẽ bị xóa âm thầm khi rơi vào hàng 7 ô.
+    gridPhase ^= 1;
 
     // Thêm hàng mới ở trên (có thể random hoặc theo pattern)
     addNewTopRow();
@@ -315,12 +320,15 @@ void Screen2View::dropEggGrid()
 
 void Screen2View::addNewTopRow()
 {
-    // Thêm hàng mới ở trên với pattern logic
-    uint32_t tick = HAL_GetTick();
-
-    for(int col = 0; col < COLS; col++)
+    // Thêm hàng mới ở trên theo pha 8/7 ô hiện tại.
+    const int topRowColumns = COLS - (isShiftedRow(0) ? 1 : 0);
+    for(int col = 0; col < topRowColumns; col++)
     {
         eggGrid[0][col] = randomColor(); // Luôn có trứng ở mỗi ô
+    }
+    for (int col = topRowColumns; col < COLS; ++col)
+    {
+        eggGrid[0][col] = EMPTY;
     }
 }
 /* Hàm dùng chung để đóng game và nhảy màn */
@@ -355,7 +363,6 @@ void Screen2View::spawnNextEgg()
     nextEgg.setVisible(false);
     nextEgg.invalidate();
 
-    uint32_t tick = HAL_GetTick();
     uint8_t color = randomColor();
     currentEggColor = color; // <== THÊM DÒNG NÀY
 
@@ -648,19 +655,7 @@ void Screen2View::setAimAngle(float angle)
 // Cập nhật đường ngắm từ base cannon
 void Screen2View::updateAimLine()
 {
-    float radians = (aimAngle * 3.14159f) / 180.0f;
-
-    const int CANNON_BASE_X = 240;
-    const int CANNON_BASE_Y = 320;
-    const int AIM_LINE_LENGTH = 100;
-
-    int endX = CANNON_BASE_X + (int)(sin(radians) * AIM_LINE_LENGTH);
-    int endY = CANNON_BASE_Y - (int)(cos(radians) * AIM_LINE_LENGTH);
-
-    // Nếu có Line widget để vẽ đường ngắm:
-    // aimLine.setStart(CANNON_BASE_X, CANNON_BASE_Y);
-    // aimLine.setEnd(aimLineEndX, aimLineEndY);
-    // aimLine.invalidate();
+    // Chưa có Line widget; hướng ngắm được thể hiện bằng cannon và nextEgg.
 }
 
 
@@ -681,8 +676,6 @@ bool Screen2View::shootEgg()
 
     float radians = (aimAngle * 3.14159f) / 180.0f;
 
-    const int CANNON_BASE_X = 240;
-    const int CANNON_BASE_Y = 320;
     const int SHOOT_DISTANCE = 45;
 
     int startX = getCannonBaseX() + (int)(sin(radians) * SHOOT_DISTANCE);
@@ -731,11 +724,6 @@ void Screen2View::updateProjectile()
 
     const int BALL_SIZE = 32;
     const int SCREEN_WIDTH = 240 ;
-    const int SCREEN_HEIGHT = 320; // hoặc chiều cao thực tế
-
-    // Lưu vị trí cũ
-    float oldX = projectileX;
-    float oldY = projectileY;
 
     // Cập nhật vị trí
     projectileX += projectileVX;
@@ -801,7 +789,8 @@ void Screen2View::handleCollisionWithEgg(int hitRow, int hitCol)
     {
         // Nếu vị trí không hợp lệ, đặt vào hàng đầu
         hitRow = 0;
-        hitCol = clamp(hitCol, 0, COLS - 1);
+        const int topRowMaxCol = isShiftedRow(0) ? COLS - 2 : COLS - 1;
+        hitCol = clamp(hitCol, 0, topRowMaxCol);
     }
 
     int attachRow = -1, attachCol = -1;
@@ -825,7 +814,8 @@ void Screen2View::handleCollisionWithEgg(int hitRow, int hitCol)
         for (int i = 0; i < 6; ++i)
         {
             int nr = hitRow + dr[i];
-            int nc = hitCol + ((hitRow % 2 == 0) ? dc_even[i] : dc_odd[i]);
+            int nc = hitCol +
+                (isShiftedRow(hitRow) ? dc_odd[i] : dc_even[i]);
 
             if (!isValidGridPosition(nr, nc)) continue;
             if (eggGrid[nr][nc] != EMPTY) continue;
@@ -833,7 +823,7 @@ void Screen2View::handleCollisionWithEgg(int hitRow, int hitCol)
             // Tính tâm ô trứng (pixel)
             int baseX = container2.getX();
             int baseY = container2.getY();
-            int xOffset = (nr % 2 == 1) ? 15 : 0;
+            int xOffset = isShiftedRow(nr) ? 15 : 0;
             float cellX = baseX + nc * 30 + xOffset + 16;
             float cellY = baseY + nr * 26 + 16;
 
@@ -890,7 +880,8 @@ void Screen2View::handleCollisionWithEgg(int hitRow, int hitCol)
 void Screen2View::handleFailedAttachment(int col)
 {
     // Thử đặt ở hàng đầu
-    col = clamp(col, 0, COLS - 1);
+    const int topRowMaxCol = isShiftedRow(0) ? COLS - 2 : COLS - 1;
+    col = clamp(col, 0, topRowMaxCol);
 
     if (eggGrid[0][col] == EMPTY)
     {
@@ -907,6 +898,11 @@ void Screen2View::handleFailedAttachment(int col)
         // Tìm ô trống đầu tiên ở hàng đầu
         for (int c = 0; c < COLS; c++)
         {
+            if (!isValidGridPosition(0, c))
+            {
+                continue;
+            }
+
             if (eggGrid[0][c] == EMPTY)
             {
                 eggGrid[0][c] = projectileColor;
@@ -956,14 +952,15 @@ void Screen2View::findAndRemoveMatchingGroup(int row, int col)
         for(int i=0;i<6;i++)
         {
             int nr = r + dr[i];
-            int nc = c + ((r&1)? dc_odd[i] : dc_even[i]);
+            int nc = c + (isShiftedRow(r) ? dc_odd[i] : dc_even[i]);
             if(!isValidGridPosition(nr,nc) || visited[nr][nc] || eggGrid[nr][nc]!=color) continue;
             visited[nr][nc] = true;
             stackR[top] = nr; stackC[top++] = nc;
         }
     }
 
-    if(gsize >= 3)
+    const bool groupRemoved = gsize >= 3;
+    if (groupRemoved)
     {
         for (int i = 0; i < gsize; ++i)
         {
@@ -973,9 +970,19 @@ void Screen2View::findAndRemoveMatchingGroup(int row, int col)
                 groupRow, groupCol, eggGrid[groupRow][groupCol]);
             eggGrid[groupRow][groupCol] = EMPTY;
         }
-        const int droppedEggs = detachUnsupportedEggs();
-        updateScore(gsize + droppedEggs);
+    }
+
+    // Chạy kiểm tra neo trần sau mọi lần resolve, kể cả khi phát bắn
+    // không tạo nhóm. Điều này tự sửa mọi cụm mồ côi còn sót từ state cũ.
+    const int droppedEggs = detachUnsupportedEggs();
+    if (groupRemoved || droppedEggs > 0)
+    {
+        updateScore((groupRemoved ? gsize : 0) + droppedEggs);
         renderEggGrid();
+    }
+
+    if (groupRemoved)
+    {
         Haptic_Play((gsize >= 6) ? HAPTIC_COMBO : HAPTIC_POP);
         HAL_UART_Transmit(&huart1, (uint8_t*)"Group cleared!\r\n", 16, 100);
     }
@@ -1008,7 +1015,7 @@ void Screen2View::startPopAnimation(int row, int col, uint8_t color)
         default: return;
     }
 
-    const int x = col * 30 + ((row & 1) ? 15 : 0);
+    const int x = col * 30 + (isShiftedRow(row) ? 15 : 0);
     const int y = row * EGG_SPACING_Y;
     popEggImages[slot].setXY(x, y);
     popEggImages[slot].setAlpha(255U);
@@ -1062,7 +1069,7 @@ int Screen2View::detachUnsupportedEggs()
     // Mọi quả ở hàng trên cùng đều được xem là neo vào trần.
     for (int col = 0; col < COLS; ++col)
     {
-        if (eggGrid[0][col] != EMPTY)
+        if (isValidGridPosition(0, col) && eggGrid[0][col] != EMPTY)
         {
             connected[0][col] = true;
             stackR[top] = 0;
@@ -1083,7 +1090,8 @@ int Screen2View::detachUnsupportedEggs()
         for (int i = 0; i < 6; ++i)
         {
             const int nextRow = row + dr[i];
-            const int nextCol = col + ((row & 1) ? dcOdd[i] : dcEven[i]);
+            const int nextCol = col +
+                (isShiftedRow(row) ? dcOdd[i] : dcEven[i]);
 
             if (!isValidGridPosition(nextRow, nextCol) ||
                 connected[nextRow][nextCol] ||
@@ -1099,7 +1107,7 @@ int Screen2View::detachUnsupportedEggs()
     }
 
     int droppedCount = 0;
-    for (int row = 1; row < ROWS; ++row)
+    for (int row = 0; row < ROWS; ++row)
     {
         for (int col = 0; col < COLS; ++col)
         {
@@ -1131,7 +1139,7 @@ int Screen2View::detachUnsupportedEggs()
                     default: break;
                 }
 
-                const int x = col * 30 + ((row & 1) ? 15 : 0);
+                const int x = col * 30 + (isShiftedRow(row) ? 15 : 0);
                 const int y = row * EGG_SPACING_Y;
                 fallingEggY[slot] = static_cast<float>(y);
                 fallingEggVelocity[slot] = 1.5f;
@@ -1220,9 +1228,10 @@ void Screen2View::checkProjectileCollision()
     {
         for (int col = 0; col < COLS && !collided; ++col)
         {
+            if (!isValidGridPosition(row, col)) continue;
             if (eggGrid[row][col] == EMPTY) continue;
 
-            int xOffset = (row % 2 == 1) ? HEX_OFFSET : 0;
+            int xOffset = isShiftedRow(row) ? HEX_OFFSET : 0;
             int eggX = baseX + col * EGG_SPACING_X + xOffset;
             int eggY = baseY + row * EGG_SPACING_Y;
 
@@ -1254,8 +1263,10 @@ void Screen2View::checkProjectileCollision()
     if (!collided && projectileY <= baseY)
     {
         float projCenterXRel = projCenterX - baseX;
-        int col = (int)(projCenterXRel / EGG_SPACING_X);
-        col = clamp(col, 0, COLS - 1);
+        const int topRowOffset = isShiftedRow(0) ? HEX_OFFSET : 0;
+        int col = (int)((projCenterXRel - topRowOffset) / EGG_SPACING_X);
+        const int topRowMaxCol = isShiftedRow(0) ? COLS - 2 : COLS - 1;
+        col = clamp(col, 0, topRowMaxCol);
 
         projectileActive = false;
         projectileImage.setVisible(false);
@@ -1287,15 +1298,20 @@ void Screen2View::updateProjectileVisual()
     }
 }
 // THÊM hàm kiểm tra tính hợp lệ của grid:
-bool Screen2View::isValidGridPosition(int row, int col)
+bool Screen2View::isShiftedRow(int row) const
+{
+    return ((row + gridPhase) & 1) != 0;
+}
+
+bool Screen2View::isValidGridPosition(int row, int col) const
 {
     if (row < 0 || row >= ROWS || col < 0 || col >= COLS)
     {
         return false;
     }
 
-    // Lưới tổ ong: hàng chẵn 8 ô, hàng lẻ 7 ô lệch sang phải 15 px.
-    return !((row % 2) == 1 && col == (COLS - 1));
+    // Pha lưới đổi sau mỗi lần hạ; hàng lệch có 7 ô, hàng còn lại có 8.
+    return !(isShiftedRow(row) && col == (COLS - 1));
 }
 
 void Screen2View::debugJoystick()
