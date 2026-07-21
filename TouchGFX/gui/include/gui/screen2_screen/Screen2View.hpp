@@ -49,10 +49,14 @@ private:
     float fallingEggVelocity[MAX_FALLING_EGGS];
     bool fallingEggActive[MAX_FALLING_EGGS];
     int activeFallingEggs;
-    static const int MAX_POP_EGGS = ROWS * COLS;
-    static const uint32_t POP_ANIMATION_MS = 160U;
-    touchgfx::Image popEggImages[MAX_POP_EGGS];
+    // Limit simultaneous split animations to keep redraw cost predictable.
+    static const int MAX_POP_EGGS = 24;
+    static const uint32_t POP_ANIMATION_MS = 220U;
+    touchgfx::Image popEggLeftImages[MAX_POP_EGGS];
+    touchgfx::Image popEggRightImages[MAX_POP_EGGS];
     uint32_t popEggStartTick[MAX_POP_EGGS];
+    int16_t popEggStartX[MAX_POP_EGGS];
+    int16_t popEggStartY[MAX_POP_EGGS];
     bool popEggActive[MAX_POP_EGGS];
     int activePopEggs;
     int score;

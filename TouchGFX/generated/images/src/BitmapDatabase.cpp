@@ -14,6 +14,16 @@ extern const unsigned char image_egg_red[]; // BITMAP_EGG_RED_ID = 6, Size: 32x3
 extern const unsigned char image_egg_yellow[]; // BITMAP_EGG_YELLOW_ID = 7, Size: 32x32 pixels
 extern const unsigned char image_pause_button[]; // BITMAP_PAUSE_BUTTON_ID = 8, Size: 400x400 pixels
 extern const unsigned char image_screen1[]; // BITMAP_SCREEN1_ID = 9, Size: 192x192 pixels
+extern const unsigned char image_egg_blue_broken_left[]; // BITMAP_EGG_BLUE_BROKEN_LEFT_ID = 10, Size: 32x32 pixels
+extern const unsigned char image_egg_blue_broken_right[]; // BITMAP_EGG_BLUE_BROKEN_RIGHT_ID = 11, Size: 32x32 pixels
+extern const unsigned char image_egg_green_broken_left[]; // BITMAP_EGG_GREEN_BROKEN_LEFT_ID = 12, Size: 32x32 pixels
+extern const unsigned char image_egg_green_broken_right[]; // BITMAP_EGG_GREEN_BROKEN_RIGHT_ID = 13, Size: 32x32 pixels
+extern const unsigned char image_egg_purple_broken_left[]; // BITMAP_EGG_PURPLE_BROKEN_LEFT_ID = 14, Size: 32x32 pixels
+extern const unsigned char image_egg_purple_broken_right[]; // BITMAP_EGG_PURPLE_BROKEN_RIGHT_ID = 15, Size: 32x32 pixels
+extern const unsigned char image_egg_red_broken_left[]; // BITMAP_EGG_RED_BROKEN_LEFT_ID = 16, Size: 32x32 pixels
+extern const unsigned char image_egg_red_broken_right[]; // BITMAP_EGG_RED_BROKEN_RIGHT_ID = 17, Size: 32x32 pixels
+extern const unsigned char image_egg_yellow_broken_left[]; // BITMAP_EGG_YELLOW_BROKEN_LEFT_ID = 18, Size: 32x32 pixels
+extern const unsigned char image_egg_yellow_broken_right[]; // BITMAP_EGG_YELLOW_BROKEN_RIGHT_ID = 19, Size: 32x32 pixels
 
 const touchgfx::Bitmap::BitmapData bitmap_database[] = {
     { image_alternate_theme_images_widgets_button_regular_height_50_tiny_round_action, 0, 110, 50, 13, 3, 84, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 44, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
@@ -25,7 +35,17 @@ const touchgfx::Bitmap::BitmapData bitmap_database[] = {
     { image_egg_red, 0, 32, 32, 0, 0, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
     { image_egg_yellow, 0, 32, 32, 0, 0, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
     { image_pause_button, 0, 400, 400, 0, 0, 400, ((uint8_t)touchgfx::Bitmap::RGB565) >> 3, 400, ((uint8_t)touchgfx::Bitmap::RGB565) & 0x7 },
-    { image_screen1, 0, 192, 192, 0, 0, 192, ((uint8_t)touchgfx::Bitmap::RGB565) >> 3, 192, ((uint8_t)touchgfx::Bitmap::RGB565) & 0x7 }
+    { image_screen1, 0, 192, 192, 0, 0, 192, ((uint8_t)touchgfx::Bitmap::RGB565) >> 3, 192, ((uint8_t)touchgfx::Bitmap::RGB565) & 0x7 },
+    { image_egg_blue_broken_left, 0, 32, 32, 0, 0, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
+    { image_egg_blue_broken_right, 0, 32, 32, 0, 0, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
+    { image_egg_green_broken_left, 0, 32, 32, 0, 0, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
+    { image_egg_green_broken_right, 0, 32, 32, 0, 0, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
+    { image_egg_purple_broken_left, 0, 32, 32, 0, 0, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
+    { image_egg_purple_broken_right, 0, 32, 32, 0, 0, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
+    { image_egg_red_broken_left, 0, 32, 32, 0, 0, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
+    { image_egg_red_broken_right, 0, 32, 32, 0, 0, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
+    { image_egg_yellow_broken_left, 0, 32, 32, 0, 0, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 },
+    { image_egg_yellow_broken_right, 0, 32, 32, 0, 0, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) >> 3, 0, ((uint8_t)touchgfx::Bitmap::ARGB8888) & 0x7 }
 };
 
 namespace BitmapDatabase
