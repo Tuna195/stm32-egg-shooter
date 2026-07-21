@@ -8,7 +8,7 @@
 
 #define ROWS 5
 #define VISIBLE_ROWS 5
-#define COLS 6
+#define COLS 8
 #define EMPTY 0
 #define RED 1
 #define BLUE 2
