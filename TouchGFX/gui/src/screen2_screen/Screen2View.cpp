@@ -446,11 +446,12 @@ int readADCChannel(ADC_HandleTypeDef* hadc, uint32_t channel)
 void Screen2View::updateJoystickInput()
 {
     extern ADC_HandleTypeDef hadc1;
+    extern ADC_HandleTypeDef hadc2;
     extern UART_HandleTypeDef huart1;
 
     // Đọc giá trị ADC từ joystick
     uint32_t adcX = readADCChannel(&hadc1, ADC_CHANNEL_13);
-    uint32_t adcY = readADCChannel(&hadc1, ADC_CHANNEL_5);
+    uint32_t adcY = readADCChannel(&hadc2, ADC_CHANNEL_5);
 
     // Nếu chưa calibrate, lấy vị trí hiện tại làm gốc
     if (!isCalibrated) {
@@ -467,19 +468,19 @@ void Screen2View::updateJoystickInput()
     int16_t rawX = (int16_t)(adcX - joystickCenterX);
     int16_t rawY = (int16_t)(adcY - joystickCenterY);
 
-    // Deadzone để tránh nhiễu
-    const int SMALL_DEADZONE = JOYSTICK_DEADZONE / 2;
-    if (abs(rawX) < SMALL_DEADZONE) rawX = 0;
-    if (abs(rawY) < SMALL_DEADZONE) rawY = 0;
+    // Chỉ áp dụng deadzone một lần trên giá trị ADC thô.
+    if (abs(rawX) < JOYSTICK_DEADZONE) rawX = 0;
+    if (abs(rawY) < JOYSTICK_DEADZONE) rawY = 0;
 
     // Clamp và scale
     const int MAX_RANGE = 800;
     rawX = clamp<int16_t>(rawX, -MAX_RANGE, MAX_RANGE);
     rawY = clamp<int16_t>(rawY, -MAX_RANGE, MAX_RANGE);
 
-    // Làm mượt
-    joystickX = applySmoothCurve(rawX, MAX_RANGE);
-    joystickY = applySmoothCurve(rawY, MAX_RANGE);
+    // Góc đã được làm mượt trong smoothAngleToTarget(). Curve bậc ba
+    // tại đây làm triệt tiêu phần lớn chuyển động của joystick.
+    joystickX = rawX;
+    joystickY = rawY;
 
     // Joystick SW is active-low; the blue USER button is active-high.
     const bool joystickButtonPressed =
@@ -518,7 +519,7 @@ void Screen2View::updateAimDirection()
     uint32_t currentTime = HAL_GetTick();
 
     // Kiểm tra xem có đang di chuyển joystick không
-    if(abs(joystickX) > JOYSTICK_DEADZONE || abs(joystickY) > JOYSTICK_DEADZONE)
+    if(joystickX != 0 || joystickY != 0)
     {
         // Đang ngắm - tính góc đích mới
         isAiming = true;
