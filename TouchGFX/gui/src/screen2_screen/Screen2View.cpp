@@ -75,6 +75,8 @@ void Screen2View::setupScreen()
 	    shotCount = 0;
 	    droppedLineCount = 0;
 	    aimAngle = 0;
+	    projectileActive = false;
+	    pendingGroupClear = false;
 
 	    initEggGrid();
 	    renderEggGrid();
@@ -430,15 +432,16 @@ void Screen2View::updateJoystickInput()
     {
         lastShotButtonTick = now;
 
-        // Gọi chức năng bắn
-        shootEgg();
+        // Chỉ phản hồi khi một phát bắn thực sự được tạo.
+        if (shootEgg())
+        {
+            // Rung bất đồng bộ; không chặn GUI/game loop.
+            Haptic_Play(HAPTIC_SHOOT);
 
-        // Rung bất đồng bộ; không chặn GUI/game loop.
-        Haptic_Play(HAPTIC_SHOOT);
-
-        // Debug UART nếu cần
-        const char* beepMsg = "Beep!\r\n";
-        HAL_UART_Transmit(&huart1, (uint8_t*)beepMsg, strlen(beepMsg), 100);
+            // Debug UART nếu cần
+            const char* beepMsg = "Beep!\r\n";
+            HAL_UART_Transmit(&huart1, (uint8_t*)beepMsg, strlen(beepMsg), 100);
+        }
     }
 
     lastButtonPressed = currentPressed;
@@ -612,8 +615,15 @@ void Screen2View::updateAimLine()
 
 
 // Cập nhật hàm bắn để bắn từ đầu nòng súng
-void Screen2View::shootEgg()
+bool Screen2View::shootEgg()
 {
+    // Một lần chỉ có một projectile. Sau va chạm, tiếp tục khóa cho tới
+    // khi nhóm đã được xử lý và quả kế tiếp đã được sinh.
+    if (projectileActive || pendingGroupClear)
+    {
+        return false;
+    }
+
     // Ẩn nextEgg khi bắn
     nextEgg.setVisible(false);
     nextEgg.invalidate();
@@ -633,7 +643,8 @@ void Screen2View::shootEgg()
     float speed = 3.0f;
 
     createProjectile(startX, startY, dirX * speed, dirY * speed);
-    }
+    return true;
+}
 
 // Hàm tạo đạn bay (cần implement thêm)
 void Screen2View::createProjectile(int x, int y, float vx, float vy)
@@ -832,11 +843,13 @@ void Screen2View::handleFailedAttachment(int col)
 
     if (eggGrid[0][col] == EMPTY)
     {
-        eggGrid[0][col] = currentEggColor;
+        eggGrid[0][col] = projectileColor;
         renderEggGrid();
 
         HAL_UART_Transmit(&huart1, (uint8_t*)"Forced attach at top\r\n", 22, 100);
-        findAndRemoveMatchingGroup(0, col);
+        pendingGroupClear = true;
+        pendingRow = 0;
+        pendingCol = col;
     }
     else
     {
@@ -845,9 +858,11 @@ void Screen2View::handleFailedAttachment(int col)
         {
             if (eggGrid[0][c] == EMPTY)
             {
-                eggGrid[0][c] = currentEggColor;
+                eggGrid[0][c] = projectileColor;
                 renderEggGrid();
-                findAndRemoveMatchingGroup(0, c);
+                pendingGroupClear = true;
+                pendingRow = 0;
+                pendingCol = c;
                 return;
             }
         }

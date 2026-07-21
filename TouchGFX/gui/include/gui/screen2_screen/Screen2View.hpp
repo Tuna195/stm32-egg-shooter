@@ -92,7 +92,7 @@ private:
     void updateCannonAndEggPosition();
     void updateAimLine();
     void updateAimVisual();
-    void shootEgg();
+    bool shootEgg();
     void createProjectile(int x, int y, float vx, float vy);
     void updateProjectile();
     void checkProjectileCollision();
