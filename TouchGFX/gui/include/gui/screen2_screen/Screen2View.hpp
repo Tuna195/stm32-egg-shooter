@@ -25,6 +25,7 @@ public:
     virtual void tearDownScreen();
     virtual void handleTickEvent() override;
     int getScore() const { return score; }
+    void performShootAction();
 
 
 protected:
@@ -110,7 +111,6 @@ private:
     void updateAimLine();
     void updateAimVisual();
     bool shootEgg();
-    void performShootAction();
     void createProjectile(int x, int y, float vx, float vy);
     void updateProjectile();
     void checkProjectileCollision();
