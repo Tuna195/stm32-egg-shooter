@@ -1,0 +1,22 @@
+# STM32CubeIDE build output
+STM32CubeIDE/Debug/
+STM32CubeIDE/Release/
+
+# Compiler and linker artifacts
+*.o
+*.obj
+*.elf
+*.hex
+*.bin
+*.map
+*.list
+*.d
+*.su
+*.cyclo
+
+# Local IDE and OS metadata
+.DS_Store
+STM32CubeIDE/.osx.project
+
+# Temporary generated assets
+tmp/
