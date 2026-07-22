@@ -101,6 +101,8 @@ const osThreadAttr_t GUI_Task_attributes = {
 /* USER CODE BEGIN PV */
 uint8_t isRevD = 0; /* Applicable only for STM32F429I DISCOVERY REVD and above */
 RNG_HandleTypeDef hrng;
+osMessageQueueId_t shootEventQueueHandle;
+extern UART_HandleTypeDef huart1; // Để dùng hàm log UART
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -226,6 +228,9 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
+  // Tạo một queue chứa được tối đa 1 phần tử (vì 1 lần bấm chỉ cần 1 tín hiệu),
+  // kích thước mỗi phần tử là 1 byte (uint8_t)
+  shootEventQueueHandle = osMessageQueueNew(1, sizeof(uint8_t), NULL);
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
@@ -830,9 +835,6 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(SPI5_NCS_GPIO_Port, SPI5_NCS_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : VSYNC_FREQ_Pin RENDER_TIME_Pin FRAME_RATE_Pin MCU_ACTIVE_Pin */
@@ -842,12 +844,24 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : SPI5_NCS_Pin PC2 */
-  GPIO_InitStruct.Pin = SPI5_NCS_Pin|GPIO_PIN_2;
+  /*Configure GPIO pin : SPI5_NCS_Pin */
+  GPIO_InitStruct.Pin = SPI5_NCS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(SPI5_NCS_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PC2 */
+  GPIO_InitStruct.Pin = GPIO_PIN_2;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PA0 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PC4 */
   GPIO_InitStruct.Pin = GPIO_PIN_4;
@@ -861,6 +875,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI0_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI2_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI2_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
   /* USER CODE END MX_GPIO_Init_2 */
@@ -1202,6 +1223,32 @@ uint32_t getRandom32(void)
 uint8_t randomColor(void)
 {
     return (getRandom32() % 5) + 1;   // 1–5
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+    // Kiểm tra ngắt đến từ PA0 (USER Button) hoặc PC2 (Joystick SW)
+    if (GPIO_Pin == GPIO_PIN_0 || GPIO_Pin == GPIO_PIN_2)
+    {
+        static uint32_t last_interrupt_time = 0;
+        uint32_t current_time = HAL_GetTick();
+
+        // Chống dội phần mềm: Bỏ qua nếu lần ngắt này cách lần trước dưới 50ms
+        if (current_time - last_interrupt_time > 50)
+        {
+            uint8_t msg = 1; // Nội dung message không quan trọng, chỉ cần có tín hiệu
+
+            // Gửi message vào queue từ ISR (Không dùng timeout trong ngắt)
+            if (osMessageQueuePut(shootEventQueueHandle, &msg, 0, 0) == osOK)
+            {
+                // Log chữ "FIRE" qua UART1
+                const char* logMsg = "FIRE\r\n";
+                // Dùng Polling với timeout nhỏ
+                HAL_UART_Transmit(&huart1, (uint8_t*)logMsg, 6, 10);
+            }
+        }
+        last_interrupt_time = current_time;
+    }
 }
 /* USER CODE END 4 */
 

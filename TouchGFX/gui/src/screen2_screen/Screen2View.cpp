@@ -477,38 +477,13 @@ void Screen2View::updateJoystickInput()
     rawX = clamp<int16_t>(rawX, -MAX_RANGE, MAX_RANGE);
     rawY = clamp<int16_t>(rawY, -MAX_RANGE, MAX_RANGE);
 
-    // Góc đã được làm mượt trong smoothAngleToTarget(). Curve bậc ba
-    // tại đây làm triệt tiêu phần lớn chuyển động của joystick.
+    // Gán lại cho biến toàn cục của joystick (dùng để tính góc ngắm)
     joystickX = rawX;
     joystickY = rawY;
 
-    // Joystick SW is active-low; the blue USER button is active-high.
-    const bool joystickButtonPressed =
-        HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_2) == GPIO_PIN_RESET;
-    const bool userButtonPressed =
-        HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_SET;
-    const bool currentPressed = joystickButtonPressed || userButtonPressed;
-    const uint32_t now = HAL_GetTick();
-
-    if (currentPressed && !lastButtonPressed &&
-        (now - lastShotButtonTick >= 50U))
-    {
-        lastShotButtonTick = now;
-
-        // Chỉ phản hồi khi một phát bắn thực sự được tạo.
-        if (shootEgg())
-        {
-            // Rung bất đồng bộ; không chặn GUI/game loop.
-            Haptic_Play(HAPTIC_SHOOT);
-
-            // Debug UART nếu cần
-            const char* beepMsg = "Beep!\r\n";
-            HAL_UART_Transmit(&huart1, (uint8_t*)beepMsg, strlen(beepMsg), 100);
-        }
-    }
-
-    lastButtonPressed = currentPressed;
+    // ĐÃ XÓA TOÀN BỘ PHẦN ĐỌC BUTTON VÀ CHỐNG DỘI Ở ĐÂY!
 }
+
 
 // Thay thế hàm updateAimDirection() hiện tại bằng code này:
 
@@ -696,6 +671,20 @@ bool Screen2View::shootEgg()
 
     createProjectile(startX, startY, dirX * speed, dirY * speed);
     return true;
+}
+
+void Screen2View::performShootAction()
+{
+    extern UART_HandleTypeDef huart1;
+    // Chỉ phản hồi rung và log khi một phát bắn thực sự được tạo ra thành công
+    if (shootEgg())
+    {
+        // Rung bất đồng bộ
+        Haptic_Play(HAPTIC_SHOOT);
+        // Debug UART cũ
+        const char* beepMsg = "Beep!\r\n";
+        HAL_UART_Transmit(&huart1, (uint8_t*)beepMsg, strlen(beepMsg), 100);
+    }
 }
 
 // Hàm tạo đạn bay (cần implement thêm)

@@ -10,6 +10,8 @@ public:
     
     virtual ~ModelListener() {}
 
+    virtual void shootButtonPressed() {}
+
     void bind(Model* m)
     {
         model = m;
