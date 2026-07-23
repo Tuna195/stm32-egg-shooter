@@ -455,14 +455,18 @@ void Screen2View::updateJoystickInput()
     int16_t rawX = (int16_t)adcX - joystickCenterX;
     int16_t rawY = (int16_t)adcY - joystickCenterY;
 
-    // Chỉ áp dụng deadzone một lần trên giá trị ADC thô.
-    if (abs(rawX) < JOYSTICK_DEADZONE) rawX = 0;
-    if (abs(rawY) < JOYSTICK_DEADZONE) rawY = 0;
-
-    // Clamp và scale
-    const int MAX_RANGE = 800;
-    rawX = clamp<int16_t>(rawX, -MAX_RANGE, MAX_RANGE);
-    rawY = clamp<int16_t>(rawY, -MAX_RANGE, MAX_RANGE);
+    // Dead-zone tròn giữ đúng tỷ lệ X/Y. Dead-zone vuông và clamp riêng
+    // từng trục làm nhiều vị trí joystick bị ép về các góc 0/45/90 độ.
+    const int32_t magnitudeSquared =
+        static_cast<int32_t>(rawX) * rawX +
+        static_cast<int32_t>(rawY) * rawY;
+    const int32_t deadzoneSquared =
+        static_cast<int32_t>(JOYSTICK_DEADZONE) * JOYSTICK_DEADZONE;
+    if (magnitudeSquared < deadzoneSquared)
+    {
+        rawX = 0;
+        rawY = 0;
+    }
 
     // Gán lại cho biến toàn cục của joystick (dùng để tính góc ngắm)
     joystickX = rawX;
@@ -492,7 +496,7 @@ void Screen2View::updateAimDirection()
         float newTargetAngle = angleRad * 180.0f / 3.14159f;
 
         // Giới hạn góc
-        newTargetAngle = clamp(newTargetAngle, -80.0f, 80.0f);
+        newTargetAngle = clamp(newTargetAngle, AIM_MIN_ANGLE, AIM_MAX_ANGLE);
 
         // Cập nhật góc đích
         targetAngle = newTargetAngle;
@@ -559,9 +563,12 @@ void Screen2View::testJoystickWithNextEgg()
         lastPrintTick = now;
 
         char msg[128];
+        const int aimAngleCentiDegrees =
+            static_cast<int>(roundf(aimAngle * 100.0f));
         snprintf(msg, sizeof(msg),
-                "Raw X: %d, Y: %d | Angle: %d | Center X: %d, Y: %d\r\n",
-                joystickX, joystickY, aimAngle, joystickCenterX, joystickCenterY);
+                "Raw X: %d, Y: %d | Angle x100: %d | Center X: %d, Y: %d\r\n",
+                joystickX, joystickY, aimAngleCentiDegrees,
+                joystickCenterX, joystickCenterY);
         HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
     }
 }
@@ -580,15 +587,15 @@ void Screen2View::resetJoystickCalibration()
 void Screen2View::updateCannonAndEggPosition()
 {
     // THAY ĐỔI 4: Sử dụng cùng công thức tính góc
-    float radians = (aimAngle * 3.14159f) / 180.0f;
+    const float radians = aimAngle * DEG_TO_RAD;
 
     int cannonBaseX = getCannonBaseX();
     int cannonBaseY = getCannonBaseY();
 
     const int EGG_DISTANCE = 45;
 
-    int nextEggX = cannonBaseX + (int)(sin(radians) * EGG_DISTANCE);
-    int nextEggY = cannonBaseY - (int)(cos(radians) * EGG_DISTANCE);
+    int nextEggX = cannonBaseX + static_cast<int>(sinf(radians) * EGG_DISTANCE);
+    int nextEggY = cannonBaseY - static_cast<int>(cosf(radians) * EGG_DISTANCE);
 
     nextEgg.moveTo(nextEggX - nextEgg.getWidth()/2,
                    nextEggY - nextEgg.getHeight()/2);
@@ -621,9 +628,9 @@ void Screen2View::resetAimToCenter()
 // THÊM HÀM TIỆN ÍCH - Đặt góc ngắm thủ công (nếu cần):
 void Screen2View::setAimAngle(float angle)
 {
-    targetAngle = clamp(angle, -80.0f, 80.0f);
+    targetAngle = clamp(angle, AIM_MIN_ANGLE, AIM_MAX_ANGLE);
     currentAngleFloat = targetAngle;
-    aimAngle = (int)round(currentAngleFloat);
+    aimAngle = currentAngleFloat;
     isAiming = false;
 }
 // Cập nhật quỹ đạo ngắm từ đầu nòng súng. Các chấm dùng cùng góc bắn,
@@ -636,7 +643,7 @@ void Screen2View::updateAimLine()
         return;
     }
 
-    const float radians = (aimAngle * 3.14159f) / 180.0f;
+    const float radians = aimAngle * DEG_TO_RAD;
     float directionX = sinf(radians);
     const float directionY = -cosf(radians);
     float pointX = getCannonBaseX() + directionX * 45.0f;
@@ -754,16 +761,18 @@ bool Screen2View::shootEgg()
     nextEgg.invalidate();
     hideAimLine();
 
-    float radians = (aimAngle * 3.14159f) / 180.0f;
+    const float radians = aimAngle * DEG_TO_RAD;
 
     const int SHOOT_DISTANCE = 45;
 
-    int startX = getCannonBaseX() + (int)(sin(radians) * SHOOT_DISTANCE);
-    int startY = getCannonBaseY() - (int)(cos(radians) * SHOOT_DISTANCE);
+    int startX = getCannonBaseX() +
+                 static_cast<int>(sinf(radians) * SHOOT_DISTANCE);
+    int startY = getCannonBaseY() -
+                 static_cast<int>(cosf(radians) * SHOOT_DISTANCE);
 
 
-    float dirX = sin(radians);
-    float dirY = -cos(radians);
+    float dirX = sinf(radians);
+    float dirY = -cosf(radians);
     const float speed = 5.0f;
 
     createProjectile(startX, startY, dirX * speed, dirY * speed);
@@ -1457,9 +1466,12 @@ void Screen2View::debugJoystick()
     {
         lastTick = now;
         char msg[128];
+        const int aimAngleCentiDegrees =
+            static_cast<int>(roundf(aimAngle * 100.0f));
         snprintf(msg, sizeof(msg),
-            "X: %d, Y: %d | Angle: %d | Center: (%d, %d)\r\n",
-            joystickX, joystickY, aimAngle, joystickCenterX, joystickCenterY);
+            "X: %d, Y: %d | Angle x100: %d | Center: (%d, %d)\r\n",
+            joystickX, joystickY, aimAngleCentiDegrees,
+            joystickCenterX, joystickCenterY);
         HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
     }
 }
@@ -1475,7 +1487,7 @@ void Screen2View::smoothAngleToTarget()
     if(angleDiff < -180.0f) angleDiff += 360.0f;
 
     // Nếu khoảng cách nhỏ, coi như đã đạt
-    if(abs(angleDiff) < ANGLE_THRESHOLD)
+    if(fabsf(angleDiff) < ANGLE_THRESHOLD)
     {
         currentAngleFloat = targetAngle;
     }
@@ -1485,22 +1497,8 @@ void Screen2View::smoothAngleToTarget()
         currentAngleFloat += angleDiff * SMOOTH_FACTOR;
     }
 
-    // Cập nhật aimAngle (dạng int để sử dụng)
-    aimAngle = (int)round(currentAngleFloat);
-}
-// THÊM HÀM CURVE MƯỢT:
-int16_t Screen2View::applySmoothCurve(int16_t value, int16_t maxRange)
-{
-    if(value == 0) return 0;
-
-    // Tính tỷ lệ (-1.0 đến 1.0)
-    float ratio = (float)value / maxRange;
-
-    // Áp dụng curve mượt (cubic easing)
-    float smoothed = ratio * ratio * ratio;
-
-    // Chuyển về giá trị int
-    return (int16_t)(smoothed * maxRange);
+    // Giữ góc dạng float đến lúc tính quỹ đạo và vận tốc viên đạn.
+    aimAngle = currentAngleFloat;
 }
 // THÊM hàm force reset game nếu bị đơ:
 void Screen2View::forceResetGame()
