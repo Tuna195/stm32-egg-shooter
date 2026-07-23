@@ -83,8 +83,6 @@ private:
     float projectileX, projectileY;
     float projectileVX, projectileVY;
     bool projectileActive;
-    bool lastButtonPressed = false;
-    uint32_t lastShotButtonTick = 0;
 
     // Hình ảnh viên đạn
     touchgfx::Image projectileImage;

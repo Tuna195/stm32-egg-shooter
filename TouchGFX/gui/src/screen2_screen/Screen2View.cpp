@@ -55,26 +55,6 @@ void Screen2View::setupScreen()
 {
 	Screen2ViewBase::setupScreen();
 
-        // Joystick SW (PC2) is active-low; the blue USER button (PA0) is
-        // active-high on the STM32F429I-DISCO board.
-        __HAL_RCC_GPIOA_CLK_ENABLE();
-        __HAL_RCC_GPIOC_CLK_ENABLE();
-
-        GPIO_InitTypeDef buttonConfig = {0};
-        buttonConfig.Pin = GPIO_PIN_2;
-        buttonConfig.Mode = GPIO_MODE_INPUT;
-        buttonConfig.Pull = GPIO_PULLUP;
-        HAL_GPIO_Init(GPIOC, &buttonConfig);
-
-        buttonConfig.Pin = GPIO_PIN_0;
-        buttonConfig.Pull = GPIO_NOPULL;
-        HAL_GPIO_Init(GPIOA, &buttonConfig);
-
-        lastButtonPressed =
-            (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_2) == GPIO_PIN_RESET) ||
-            (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_SET);
-        lastShotButtonTick = HAL_GetTick();
-
 	    // Reset joystick calibration khi vào màn hình
 	    resetJoystickCalibration();
 
