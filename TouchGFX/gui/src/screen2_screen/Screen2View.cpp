@@ -10,6 +10,29 @@
 #include <utility>      // std::pair
 #include <functional>   // std::function
 #include <climits>
+#include <cstdarg>
+
+// Bật/tắt log debug qua UART. Mặc định TẮT: giữ HAL_UART_Transmit (blocking
+// tối đa 100 ms) ra khỏi luồng render game để không gây giật khung hình.
+// Đặt = 1 khi cần soi log trong lúc phát triển.
+#define GAME_DEBUG_UART 0
+
+#if GAME_DEBUG_UART
+static void gameDebugPrintf(const char* fmt, ...)
+{
+    extern UART_HandleTypeDef huart1;
+    char buf[128];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    HAL_UART_Transmit(&huart1, (uint8_t*)buf, strlen(buf), 100);
+}
+#define GAME_DBG(...) gameDebugPrintf(__VA_ARGS__)
+#else
+#define GAME_DBG(...) ((void)0)
+#endif
+
 template <typename T>
 T clamp(T value, T minVal, T maxVal)
 {
@@ -336,9 +359,7 @@ void Screen2View::triggerGameOver()
     projectileImage.setVisible(false);
     projectileImage.invalidate();
 
-    const char* gameOverMessage = "GAME OVER - danger line crossed!\r\n";
-    HAL_UART_Transmit(&huart1, (uint8_t*)gameOverMessage,
-        strlen(gameOverMessage), 100);
+    GAME_DBG("GAME OVER - danger line crossed!\r\n");
 
     notifyGameOver();
 }
@@ -431,8 +452,6 @@ void Screen2View::clearEggGrid()
 
 void Screen2View::updateJoystickInput()
 {
-    extern UART_HandleTypeDef huart1;
-
     // DMA circular liên tục lấy mẫu; GUI chỉ đọc giá trị trung bình.
     uint16_t adcX = 2048U;
     uint16_t adcY = 2048U;
@@ -445,10 +464,8 @@ void Screen2View::updateJoystickInput()
         joystickCenterY = 2048;
         isCalibrated = true;
 
-        char msg[64];
-        snprintf(msg, sizeof(msg), "Joystick center - X:%d Y:%d\r\n",
+        GAME_DBG("Joystick center - X:%d Y:%d\r\n",
                  joystickCenterX, joystickCenterY);
-        HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
     }
 
     // Tính toán rawX/rawY
@@ -562,14 +579,10 @@ void Screen2View::testJoystickWithNextEgg()
     {
         lastPrintTick = now;
 
-        char msg[128];
-        const int aimAngleCentiDegrees =
-            static_cast<int>(roundf(aimAngle * 100.0f));
-        snprintf(msg, sizeof(msg),
-                "Raw X: %d, Y: %d | Angle x100: %d | Center X: %d, Y: %d\r\n",
-                joystickX, joystickY, aimAngleCentiDegrees,
+        GAME_DBG("Raw X: %d, Y: %d | Angle x100: %d | Center X: %d, Y: %d\r\n",
+                joystickX, joystickY,
+                static_cast<int>(roundf(aimAngle * 100.0f)),
                 joystickCenterX, joystickCenterY);
-        HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
     }
 }
 // Thêm hàm reset calibration (gọi khi cần hiệu chỉnh lại)
@@ -579,8 +592,7 @@ void Screen2View::resetJoystickCalibration()
     joystickCenterX = 2048;
     joystickCenterY = 2048;
 
-    char msg[] = "Joystick center reset to ADC midpoint.\r\n";
-    HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
+    GAME_DBG("Joystick center reset to ADC midpoint.\r\n");
 }
 
 // Cũng cần sửa hàm updateCannonAndEggPosition() để đồng bộ:
@@ -781,15 +793,12 @@ bool Screen2View::shootEgg()
 
 void Screen2View::performShootAction()
 {
-    extern UART_HandleTypeDef huart1;
     // Chỉ phản hồi rung và log khi một phát bắn thực sự được tạo ra thành công
     if (shootEgg())
     {
         // Rung bất đồng bộ
         Haptic_Play(HAPTIC_SHOOT);
-        // Debug UART cũ
-        const char* beepMsg = "Beep!\r\n";
-        HAL_UART_Transmit(&huart1, (uint8_t*)beepMsg, strlen(beepMsg), 100);
+        GAME_DBG("Beep!\r\n");
     }
 }
 
@@ -860,14 +869,14 @@ void Screen2View::updateProjectile()
     {
         projectileStartTime = HAL_GetTick();
     }
-    else if (projectileActive && (HAL_GetTick() - projectileStartTime) > 10000) // 5 giây
+    else if (projectileActive && (HAL_GetTick() - projectileStartTime) > 10000) // 10 giây
     {
         projectileActive = false;
         projectileImage.setVisible(false);
         projectileImage.invalidate();
         projectileStartTime = 0;
 
-        HAL_UART_Transmit(&huart1, (uint8_t*)"Projectile timeout\r\n", 20, 100);
+        GAME_DBG("Projectile timeout\r\n");
     }
     else if (!projectileActive)
     {
@@ -954,10 +963,8 @@ void Screen2View::handleCollisionWithEgg(int hitRow, int hitCol)
         eggGrid[attachRow][attachCol] = projectileColor;
         renderEggGrid();
 
-        char msg[64];
-        snprintf(msg, sizeof(msg), "Attached at (%d,%d) color:%d\r\n",
+        GAME_DBG("Attached at (%d,%d) color:%d\r\n",
                 attachRow, attachCol, currentEggColor);
-        HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
         pendingGroupClear = true;
         pendingRow = attachRow;
         pendingCol = attachCol;
@@ -991,7 +998,7 @@ void Screen2View::handleFailedAttachment(int col)
         eggGrid[0][col] = projectileColor;
         renderEggGrid();
 
-        HAL_UART_Transmit(&huart1, (uint8_t*)"Forced attach at top\r\n", 22, 100);
+        GAME_DBG("Forced attach at top\r\n");
         pendingGroupClear = true;
         pendingRow = 0;
         pendingCol = col;
@@ -1018,7 +1025,7 @@ void Screen2View::handleFailedAttachment(int col)
         }
 
         // Nếu hàng đầu đầy - Game Over
-        HAL_UART_Transmit(&huart1, (uint8_t*)"Game Over - Top row full!\r\n", 27, 100);
+        GAME_DBG("Game Over - Top row full!\r\n");
         triggerGameOver();
     }
 }
@@ -1091,7 +1098,7 @@ void Screen2View::findAndRemoveMatchingGroup(int row, int col)
     if (groupRemoved)
     {
         Haptic_Play(comboCleared ? HAPTIC_COMBO : HAPTIC_EGG_CLUSTER);
-        HAL_UART_Transmit(&huart1, (uint8_t*)"Group cleared!\r\n", 16, 100);
+        GAME_DBG("Group cleared!\r\n");
     }
 }
 
@@ -1400,7 +1407,7 @@ void Screen2View::checkProjectileCollision()
                 projectileImage.setVisible(false);
                 projectileImage.invalidate();
 
-                HAL_UART_Transmit(&huart1, (uint8_t*)"Va cham - STOP!\r\n", 18, 100);
+                GAME_DBG("Va cham - STOP!\r\n");
                 handleCollisionWithEgg(row, col);
                 break;
             }
@@ -1420,7 +1427,7 @@ void Screen2View::checkProjectileCollision()
         projectileImage.setVisible(false);
         projectileImage.invalidate();
 
-        HAL_UART_Transmit(&huart1, (uint8_t*)"Chạm trần - Gắn trên cùng\r\n", 28, 100);
+        GAME_DBG("Cham tran - Gan tren cung\r\n");
         handleCollisionWithEgg(0, col);
     }
 }
@@ -1469,14 +1476,10 @@ void Screen2View::debugJoystick()
     if (now - lastTick > 500)
     {
         lastTick = now;
-        char msg[128];
-        const int aimAngleCentiDegrees =
-            static_cast<int>(roundf(aimAngle * 100.0f));
-        snprintf(msg, sizeof(msg),
-            "X: %d, Y: %d | Angle x100: %d | Center: (%d, %d)\r\n",
-            joystickX, joystickY, aimAngleCentiDegrees,
+        GAME_DBG("X: %d, Y: %d | Angle x100: %d | Center: (%d, %d)\r\n",
+            joystickX, joystickY,
+            static_cast<int>(roundf(aimAngle * 100.0f)),
             joystickCenterX, joystickCenterY);
-        HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
     }
 }
 
@@ -1521,5 +1524,5 @@ void Screen2View::forceResetGame()
     // Spawn lại nextEgg
     spawnNextEgg();
 
-    HAL_UART_Transmit(&huart1, (uint8_t*)"Game force reset!\r\n", 19, 100);
+    GAME_DBG("Game force reset!\r\n");
 }
