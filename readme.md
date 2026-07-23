@@ -13,78 +13,86 @@
 
 # GAME BẮN TRỨNG KHỦNG LONG
 
-
 ## GIỚI THIỆU
 
-__Đề bài__: Game bắn trứng khủng long
+__Đề bài__: Game bắn trứng khủng long (kiểu *bubble shooter*).
 
-__Mục tiêu__: Phát triển một trò chơi tương tác trên nền tảng nhúng (STM32), sử dụng giao diện đồ họa TouchGFX, điều khiển bằng joystick, có âm thanh và logic game hoàn chỉnh.
+__Mục tiêu__: Phát triển một trò chơi tương tác trên nền tảng nhúng STM32F429,
+dùng giao diện đồ họa TouchGFX, điều khiển bằng joystick analog, có phản hồi
+rung (haptic) và logic game hoàn chỉnh.
 
-__Sản phẩm:__
-1. **Điều khiển hướng súng bằng joystick**  
-   – Người chơi có thể xoay hướng nòng súng theo ý muốn bằng cần joystick (analog).  
-   – Hai trục được lấy mẫu bằng ADC + DMA vòng tròn, kích bởi TIM3, sau đó chuyển đổi thành góc bắn theo thời gian thực.
-   – Hướng nòng súng sẽ thay đổi mượt mà tùy theo độ lệch của cần joystick.
+__Tính năng chính__:
 
-2. **Âm thanh hiệu ứng**  
-   – Phát âm thanh mỗi khi người chơi bắn trứng, khi nhóm trứng bị xóa hoặc khi trò chơi kết thúc (Game Over).  
-   – Âm thanh phát từ buzzer thông qua điều khiển GPIO, kết hợp với hiệu ứng trên giao diện.
+1. **Điều khiển hướng bắn bằng joystick (ADC + DMA)**
+   – Hai trục X/Y của joystick được lấy mẫu bằng **ADC + DMA vòng tròn**, kích
+     nhịp bởi **TIM3** (~1 kHz).
+   – GUI chỉ đọc **giá trị trung bình** của buffer trong `handleTickEvent()`,
+     không chờ ADC → không chặn khung hình.
+   – Có dead-zone dạng tròn (giữ đúng tỉ lệ X/Y) và làm mượt góc; góc bắn giới
+     hạn trong khoảng **±80°**, trở về 0° khi thả cần.
 
-3. **Tạo màn chơi ngẫu nhiên **  
-   – Mỗi lần bắt đầu game, lưới trứng được sinh ra ngẫu nhiên với các màu khác nhau.  
-   – Dữ liệu được sinh bởi bộ sinh số ngẫu nhiên của STM32, đảm bảo tính bất ngờ và tăng độ thử thách.  
-   – Các nhóm trứng sẽ xuất hiện với nhiều tổ hợp khác nhau ở mỗi lượt chơi.
+2. **Phản hồi rung (Haptic – motor rung PWM)**
+   – Dùng **motor rung** điều khiển bằng PWM (`TIM4_CH1` / PD12) thay cho âm
+     thanh, theo yêu cầu môn học.
+   – Một *pattern engine* phát các rung khác nhau cho từng sự kiện: bắn, xoá
+     nhóm trứng, combo, cảnh báo khi hạ lưới, và Game Over.
+   – Engine chạy phi chặn: ISR/hàm game chỉ đặt cường độ, việc đếm thời gian do
+     `Haptic_Update()` xử lý trong `defaultTask` mỗi 10 ms.
 
-4. **Hiển thị giao diện bằng TouchGFX**  
-   – Giao diện sinh động, có hoạt ảnh khi đạn bay, trứng nổ hoặc khi chuyển giữa các màn hình.  
-   – Cập nhật liên tục trong `tick()` với tốc độ ổn định, tạo trải nghiệm chơi game mượt mà.  
-   – Bitmap của các quả trứng thay đổi tương ứng theo màu sắc.
+3. **Sinh màn chơi ngẫu nhiên (RNG)**
+   – Mỗi ván, lưới trứng được sinh ngẫu nhiên với 5 màu.
+   – Dùng `HAL_RNG_GenerateRandomNumber()` (fallback `HAL_GetTick()` nếu RNG
+     lỗi) để chọn màu, tăng tính bất ngờ.
 
-5. **Logic trò chơi hoàn chỉnh**  
-   – Tự động phát hiện nhóm trứng cùng màu khi đạn chạm và loại bỏ nếu đủ 3 quả.  
-   – Quản lý trạng thái lưới, cập nhật điểm số, phát hiện game over.  
-   – Có xử lý hiệu ứng phản xạ nếu trứng chạm mép trái/phải.
+4. **Giao diện TouchGFX**
+   – Ba màn hình: **Screen1** (bắt đầu), **Screen2** (chơi game), **GameOver**
+     (kết thúc, hiển thị điểm và điểm cao nhất).
+   – Hoạt ảnh khi đạn bay, trứng nổ (tách đôi) và trứng mất neo rơi xuống.
+   – Cập nhật liên tục trong `handleTickEvent()` với tốc độ ổn định.
 
-6. **ADC DMA và nút bắn bằng ngắt**
-   – Trục X/Y được ADC lấy mẫu nền bằng DMA; giao diện chỉ đọc giá trị trung bình trong `handleTickEvent()`.
-   – Nút SW của joystick dùng EXTI cạnh xuống, chống dội rồi gửi sự kiện bắn qua CMSIS-RTOS message queue.
-   – ISR không gọi trực tiếp TouchGFX và không truyền UART blocking.
+5. **Logic game hoàn chỉnh**
+   – Lưới tổ ong (hex) 8×8, tự phát hiện nhóm trứng cùng màu (DFS 6 hướng); đủ
+     **≥ 3 quả** thì xoá cả nhóm.
+   – Sau khi xoá, các cụm trứng mất điểm neo với trần sẽ **rơi xuống**.
+   – Cộng điểm, **combo** khi xoá nhóm lớn, cập nhật điểm cao nhất.
+   – Hạ lưới sau mỗi số phát bắn nhất định; trứng chạm **danger line** → Game
+     Over. Đạn phản xạ khi chạm mép trái/phải.
 
+6. **Nút bắn bằng ngắt (EXTI) + hàng đợi**
+   – Nút SW joystick trên **PG3** dùng **EXTI cạnh xuống**, chống dội trong ISR
+     rồi đẩy sự kiện vào **CMSIS-RTOS message queue**.
+   – GUI task lấy sự kiện từ queue để bắn an toàn — **ISR không gọi trực tiếp
+     TouchGFX và không truyền UART**.
+   – Nút USER tích hợp trên **PA0** dùng làm nút bắn dự phòng.
 
-_Ảnh chụp minh họa:_
-   - Screen1:
-     ![z6779802892988_abbf0531b1280fcf7b581d81a7bfb1a6](https://github.com/user-attachments/assets/b541439d-704d-4d1a-8eeb-7e57409dce4c)
-   - Screen2:
-     ![z6779796516187_98677983efed2f49631b07eb1d42190b](https://github.com/user-attachments/assets/3f175188-a8fc-412a-b267-f47e819930a7)
-   - Screen3:
-     ![z6779796516963_8ce38e9d6363994f6a36c4069e4eb2d2](https://github.com/user-attachments/assets/8a099e5f-6a2b-4d3a-a6d3-c83c717da2f1)
+7. **Lưu điểm cao nhất vào Flash**
+   – Điểm cao nhất được ghi bền vào Flash nội (sector 23), đọc lại khi khởi
+     động. Việc ghi Flash chạy trong một task riêng (bất đồng bộ) để không làm
+     giật giao diện.
 
-     
-
-     
-
- 
 ## TÁC GIẢ
 
-- Tên nhóm: Chập mạch
-- Thành viên trong nhóm
-  |STT|Họ tên|MSSV|Công việc|
+- Tên nhóm: _(điền)_
+- Thành viên và phân công:
+
+  | STT | Họ tên | MSSV | Công việc |
   |--:|--|--|--|
-  |1| Mai Quốc Đạt|20225277|hiện thị oled, hiệu ứng, và xử lý logic va chạm, xử lý logic RNG, xử lý logic xoá trứng và update điểm|
-  |2| Dương Đăng Duy|20225185|Kết nối, cấu hình điều khiển Joystick, còi Buzzer; cài đặt góc bắn ; xử lý hiệu ứng viên đạn bay và va chạm|
-  |1| Bùi Gia Lộc|20225142|hiện thị oled, hiệu ứng, và xử lý ngắt|
-  
+  | 1 | Quang Sơn | _(điền)_ | Input: driver ADC + DMA joystick, calibrate, ghép vào game |
+  | 2 | Thành | _(điền)_ | Ngắt EXTI nút bắn + chống dội, ghép nút bắn vào game |
+  | 3 | Thắng | _(điền)_ | Haptic: motor rung PWM, pattern engine, ghép rung vào sự kiện game |
+  | 4 | Đỗ Sơn | _(điền)_ | Logic game (Screen2View), ghép các phần, ra bản 1P hoàn chỉnh |
+  | 5 | Tuấn | _(điền)_ | Leader / UI / cấu hình `.ioc` / build & merge Git |
 
 ## MÔI TRƯỜNG HOẠT ĐỘNG
 
-- **Kit sử dụng**: `STM32F429 Discovery Kit`
+- **Kit sử dụng**: `STM32F429I-DISCO` (STM32F429ZI, màn hình TFT 2.4" tích hợp,
+  bộ nhớ Flash 2 MB).
 
-- **Module, linh kiện sử dụng**:
-  - `Joystick 2 trục`: điều khiển hướng bắn của súng
-  - `Màn hình TFT LCD`: hiển thị giao diện trò chơi và hiệu ứng
-  - `Buzzer (còi)`: phát âm thanh khi bắn hoặc Game Over
-  - `Nút nhấn`: dùng để bắt đầu lại game hoặc thực hiện bắn
-  - `Nguồn USB 5V`: cấp nguồn cho kit hoạt động
+- **Module, linh kiện**:
+  - `Joystick 2 trục` (analog + nút SW): điều khiển hướng bắn và bắn.
+  - `Màn hình TFT LCD tích hợp` (ILI9341, LTDC): hiển thị game và hiệu ứng.
+  - `Motor rung` (module 3 chân có mạch lái): phản hồi haptic.
+  - `Nguồn USB 5V`: cấp nguồn cho kit.
 
 ## SƠ ĐỒ KẾT NỐI
 
@@ -94,239 +102,139 @@ _Ảnh chụp minh họa:_
 |---|---|---|
 | `VCC` | `3V3` | Nguồn 3,3 V |
 | `GND` | `GND` | Mass chung |
-| `X` / `VRx` | `PC3` | `ADC1_IN13`, lấy mẫu bằng DMA2 Stream0 |
-| `Y` / `VRy` | `PA5` | `ADC2_IN5`, lấy mẫu bằng DMA2 Stream2 |
+| `X` / `VRx` | `PC3` | `ADC1_IN13`, DMA2 Stream0 (vòng tròn) |
+| `Y` / `VRy` | `PA5` | `ADC2_IN5`, DMA2 Stream2 (vòng tròn) |
 | `SW` | `PG3` | GPIO pull-up, ngắt `EXTI3` cạnh xuống để bắn |
 
 > [!WARNING]
-> Không nối `SW` vào `PC2`. PC2 đang được màn hình tích hợp sử dụng làm
-> `LCD_CS`. Nút USER tích hợp trên `PA0` vẫn có thể dùng như nút bắn dự phòng.
+> Không nối `SW` vào `PC2`. PC2 đang được màn hình tích hợp dùng làm `LCD_CS`.
+> Nút USER tích hợp trên `PA0` (`EXTI0`) vẫn dùng được như nút bắn dự phòng.
 
 ### Module motor rung ba chân
 
-| Chân module motor rung | Chân STM32F429I-DISCO | Chức năng |
+| Chân module | Chân STM32F429I-DISCO | Chức năng |
 |---|---|---|
 | `VCC` | `3V3` hoặc nguồn đúng định mức module | Nguồn cho module |
 | `GND` | `GND` | Mass chung với STM32 |
 | `IN` / `S` | `PD12` | PWM `TIM4_CH1` điều khiển cường độ rung |
 
 > [!CAUTION]
-> Bảng trên áp dụng cho **module motor rung ba chân có mạch driver**. Không
-> nối motor rung hai dây trực tiếp vào PD12; cần transistor/MOSFET, diode bảo
-> vệ và nguồn phù hợp với dòng của motor.
+> Bảng trên áp dụng cho **module motor rung ba chân có sẵn mạch driver**. Không
+> nối motor rung hai dây trực tiếp vào PD12; cần transistor/MOSFET, diode bảo vệ
+> và nguồn phù hợp với dòng của motor.
 
+## KIẾN TRÚC PHẦN MỀM
 
+### Hệ điều hành & luồng (FreeRTOS / CMSIS-RTOS2)
 
+| Task | Nhiệm vụ |
+|---|---|
+| `GUI_Task` | Chạy TouchGFX: đọc joystick, cập nhật logic game, vẽ giao diện |
+| `defaultTask` | Gọi `Haptic_Update(10)` mỗi 10 ms để chạy pattern rung |
+| `highScoreTask` | Ghi điểm cao nhất vào Flash khi có yêu cầu (bất đồng bộ) |
 
+`TIM6` được dùng làm nguồn thời gian (time base) cho HAL.
 
+### Luồng dữ liệu điều khiển
 
-### TÍCH HỢP HỆ THỐNG
+```
+Joystick X/Y ─(ADC+DMA vòng tròn, TIM3 ~1kHz)─► buffer ─► Joystick_GetADC() (trung bình)
+                                                              │
+                                                    Screen2View::updateJoystickInput()
+                                                              │  (dead-zone, làm mượt góc)
+                                                              ▼
+                                                        góc bắn (aimAngle)
 
-#### Phần cứng
+Nút SW/PG3 ─(EXTI3, chống dội 50ms)─► shootEventQueue ─► Model::tick() ─► performShootAction()
+```
 
-- **Kit điều khiển chính**: `STM32F429 Discovery Kit` – xử lý toàn bộ logic trò chơi, hiển thị và điều khiển ngoại vi.
-- **Joystick 2 trục**: nhập điều khiển từ người chơi để xoay hướng bắn.
-- **Màn hình TFT LCD**: hiển thị đồ họa trò chơi, trạng thái đạn, trứng và Game Over.
-- **Buzzer (còi)**: tạo hiệu ứng âm thanh khi bắn hoặc kết thúc trò chơi.
-- **Nút nhấn**: thực hiện thao tác bắn hoặc reset lại màn chơi.
-- **Nguồn USB 5V**: cấp nguồn cho toàn hệ thống.
+### Sinh số ngẫu nhiên
 
-#### Phần mềm
+`getRandom32()` dùng `HAL_RNG_GenerateRandomNumber()`, nếu lỗi thì fallback về
+`HAL_GetTick()`. `randomColor()` trả về màu 1–5.
 
- - **TouchGFX (STM32F429)**  
-  Thiết kế giao diện người dùng (UI), bao gồm các màn hình game như `Screen2` (chơi game), `Screen3` (Game Over), xử lý hiệu ứng chuyển cảnh, cập nhật điểm số, và điều khiển logic game theo từng khung hình (`tick()`).
+### Lưu điểm cao nhất (Flash)
 
-- **Firmware C/C++ (STM32 HAL)**  
-  Điều khiển phần cứng như LCD, phát âm thanh bằng PWM hoặc DAC, xử lý va chạm giữa đạn và trứng, điều hướng đạn, chuyển đổi giữa các màn hình.  
-  Chịu trách nhiệm:
-  - Đọc giá trị joystick qua ADC.
-  - Xác định hướng bắn từ giá trị joystick.
-  - Điều khiển logic game như sinh trứng mới, kiểm tra va chạm, xử lý Game Over.
+- Vùng lưu: `0x081E0000`, `FLASH_SECTOR_23`, kích thước 128 KiB.
+- Mỗi bản ghi gồm `magic` + `score` + `score_inv` (nghịch đảo bit để kiểm tra
+  toàn vẹn). Ghi kiểu **append** để tránh xoá sector mỗi lần; chỉ xoá khi sector
+  đầy. `magic` được ghi **cuối cùng** nên nếu mất điện giữa chừng, bản ghi dở dang
+  bị coi là không hợp lệ và các bản cũ vẫn đọc được.
+- `HighScore_RequestSave()` đẩy điểm vào queue để `highScoreTask` ghi Flash, nhờ
+  đó GUI không bị khựng.
 
-- **STM32CubeIDE (IDE phát triển firmware)**  
-  - Viết và quản lý code C/C++ sử dụng HAL.
-  - Tích hợp với mã được sinh ra từ TouchGFX (`ScreenView.cpp`, `Model.cpp`, `FrontendApplication.cpp`...).
-  - Hỗ trợ build project, debug, nạp firmware vào MCU STM32F429.
+## ĐẶC TẢ HÀM (Screen2View)
 
-- **Joystick + ADC DMA + EXTI**
-  - Dùng 2 kênh ADC để đọc giá trị trục X và Y từ joystick.  
-  - TIM3 kích ADC1/ADC2; DMA2 Stream0/Stream2 ghi liên tục vào buffer vòng tròn.
-  - `handleTickEvent()` đọc giá trị trung bình từ buffer để cập nhật hướng bắn mà không chờ ADC.
-  - Nút SW trên PG3 phát ngắt EXTI3, gửi event vào queue để TouchGFX thực hiện bắn an toàn trong GUI task.
+```C
+/**
+ * Hàm được gọi mỗi khung hình (tick) của TouchGFX. Cập nhật toàn bộ logic:
+ *  - Đọc joystick và cập nhật hướng bắn (updateAimDirection).
+ *  - Cập nhật viên đạn đang bay (updateProjectile).
+ *  - Cập nhật trứng rơi và hoạt ảnh trứng nổ.
+ *  - Nếu có nhóm cần xử lý (pendingGroupClear) thì tìm & xoá nhóm, kiểm tra
+ *    danger line, rồi chuẩn bị lượt bắn kế tiếp.
+ */
+void Screen2View::handleTickEvent();
 
-- **RNG (Random Number Generator)**  
-  - Tạo ra các đặc tính ngẫu nhiên cho từng màn chơi như màu sắc, vị trí trứng hoặc hướng rơi.  
-  - Sử dụng HAL_RNG_GenerateRandomNumber() để tạo màu ngẫu nhiên (có fallback là dùng HAL_GetTick())  
-  - Giúp tăng độ thử thách và tính đa dạng cho trò chơi.
+/**
+ * Đọc joystick từ DMA (trung bình buffer), trừ tâm danh định (2048), áp dead-zone
+ * tròn rồi ghi vào joystickX/joystickY. KHÔNG đọc nút bắn ở đây — nút bắn do EXTI
+ * xử lý. (Tên hàm được đặt calibrate ở tâm danh định để người chơi có thể gạt cần
+ * ngay khi vào màn.)
+ */
+void Screen2View::updateJoystickInput();
 
-- **Timer (TouchGFX tick)**  
-  - Bộ định thời (timer) được cấu hình để tạo ra ngắt định kỳ.  
-  - Trong ngắt, gọi `MX_TouchGFX_Process()` để kích hoạt hệ thống tick của TouchGFX.  
-  - Mỗi tick thực hiện:
-    - Đọc joystick.
-    - Cập nhật đạn và vật thể.
-    - Kiểm tra va chạm.
-    - Vẽ lại giao diện.
+/**
+ * Bắn một viên đạn theo góc aimAngle hiện tại. Trả về true nếu tạo được phát bắn
+ * (đang không có đạn bay, không có nhóm chờ xử lý, không có trứng đang rơi/nổ).
+ * performShootAction() gọi hàm này rồi phát rung HAPTIC_SHOOT khi bắn thành công.
+ */
+bool Screen2View::shootEgg();
 
-### ĐẶC TẢ HÀM
+/**
+ * Kiểm tra va chạm giữa đạn đang bay và trứng trên lưới (theo bán kính). Nếu trúng
+ * → dừng đạn và gọi handleCollisionWithEgg(). Nếu không trúng mà chạm trần → gắn
+ * vào hàng trên cùng.
+ */
+void Screen2View::checkProjectileCollision();
 
-- Giải thích một số hàm quan trọng: ý nghĩa của hàm, tham số vào, ra
+/**
+ * Từ ô (row,col), duyệt DFS 6 hướng (tổ ong, phân biệt hàng chẵn/lẻ) tìm nhóm cùng
+ * màu liền kề. Nếu ≥ 3 quả → nổ cả nhóm, cộng điểm (có COMBO_BONUS khi nhóm ≥ 6),
+ * gỡ các cụm mất neo (detachUnsupportedEggs), vẽ lại lưới và phát rung tương ứng.
+ */
+void Screen2View::findAndRemoveMatchingGroup(int row, int col);
 
-  ```C
-     /**
-     * Hàm được gọi định kỳ mỗi khung hình (tick) của TouchGFX.
-  * Chịu trách nhiệm cập nhật toàn bộ logic chính của màn chơi:
-  *  - Đọc hướng bắn từ joystick.
-  *  - Cập nhật vị trí đạn đang bay.
-  *  - Hiển thị góc bắn để debug.
-  *  - Nếu có nhóm trứng cần xóa, gọi hàm xử lý nhóm và chuẩn bị đạn mới.
-  */
-  void Screen2View::handleTickEvent();
-  ```
-   ```C
-    /**
-  * Kiểm tra xem đạn đang bay có va chạm với quả trứng nào trên lưới không.
-  * Nếu va chạm, dừng đạn lại và xử lý va chạm tại vị trí phù hợp.
-  * Nếu không va chạm trứng nào nhưng chạm trần, gắn đạn vào hàng trên cùng.
-  *
-  * Logic chính:
-  * - Duyệt qua toàn bộ lưới trứng, tính khoảng cách từ tâm đạn đến từng trứng.
-  * - Nếu khoảng cách nhỏ hơn bán kính va chạm -> xử lý va chạm.
-  * - Nếu không trúng trứng nào mà đạn chạm trần -> xử lý gắn vào hàng đầu.
-   *
-  * Điều kiện đầu vào:
-  * - `projectileActive == true`: nghĩa là đang có đạn bay.
-  *
-  * Dữ liệu liên quan:
-  * - `eggGrid[row][col]`: ma trận lưu trạng thái quả trứng.
-   * - `projectileX`, `projectileY`: vị trí hiện tại của đạn.
-  *
-  * Tác vụ:
-  * - Ẩn đạn khi kết thúc va chạm.
-  * - Gửi tín hiệu debug qua UART.
-  * - Gọi `handleCollisionWithEgg(row, col)` để xử lý thêm.
-  */
-  void Screen2View::checkProjectileCollision();
+/**
+ * Hạ toàn bộ lưới xuống 1 hàng, thêm hàng mới ở trên, đảo pha 8/7 ô và phát rung
+ * cảnh báo (HAPTIC_WARNING). Gọi sau mỗi SHOTS_BEFORE_DROP phát bắn.
+ */
+void Screen2View::dropEggGrid();
+```
 
+## THÔNG SỐ / HẰNG SỐ CHÍNH
 
-  ```
-   ```C
-    /**
-  * Tìm và loại bỏ nhóm trứng cùng màu liền kề từ vị trí chỉ định.
-  *
-   * @param row  Hàng bắt đầu kiểm tra.
-  * @param col  Cột bắt đầu kiểm tra.
-  *
-  * Chức năng:
-  * - Duyệt theo kiểu DFS để tìm tất cả các quả trứng cùng màu kết nối liền nhau (6 hướng).
-  * - Nếu số lượng trứng >= 3 -> xóa toàn bộ nhóm này khỏi lưới.
-  * - Cập nhật điểm, vẽ lại lưới, kiểm tra điều kiện Game Over.
-  *
-  * Chi tiết xử lý:
-  * - Sử dụng mảng `visited` để đánh dấu các ô đã xét.
-  * - Duyệt theo 6 hướng tùy theo hàng chẵn/lẻ (mô hình tổ ong).
-  * - Gọi `updateScore()`, `renderEggGrid()`, `triggerGameOver()` nếu cần.
-  * - Gửi chuỗi "Group cleared!" qua UART để debug.
-  *
-   * Điều kiện không xử lý:
-  * - Vị trí không hợp lệ (`!isValidGridPosition()`).
-  * - Trứng rỗng (`eggGrid[row][col] == EMPTY`).
-  */
-  void Screen2View::findAndRemoveMatchingGroup(int row, int col);
+| Tên | Giá trị | Ý nghĩa |
+|---|--:|---|
+| `ROWS` × `COLS` | 8 × 8 | Kích thước lưới trứng (tổ ong) |
+| Số màu trứng | 5 | RED, BLUE, GREEN, YELLOW, PURPLE |
+| `POINTS_PER_EGG` | 10 | Điểm mỗi quả bị xoá |
+| Ngưỡng xoá nhóm | ≥ 3 | Số quả cùng màu tối thiểu để nổ |
+| Ngưỡng combo | ≥ 6 | Nhóm đủ lớn được cộng thêm `COMBO_BONUS_EGGS` |
+| `SHOTS_BEFORE_DROP` | 5 | Số phát bắn giữa hai lần hạ lưới |
+| `DANGER_LINE_Y` | 220 | Vạch thua (px) |
+| `JOYSTICK_DMA_SAMPLES` | 16 | Số mẫu ADC lấy trung bình mỗi trục |
+| `JOYSTICK_DEADZONE` | 200 | Bán kính dead-zone (đơn vị ADC) |
+| Góc bắn | ±80° | Giới hạn `AIM_MIN/MAX_ANGLE` |
 
+## GHI CHÚ CHO NGƯỜI PHÁT TRIỂN
 
-  ```
-   ```C
-     /**
-   /**
-  * Đọc giá trị joystick từ ADC, xử lý hướng và nút nhấn để điều khiển game.
-  *
-  * - Đọc giá trị trục X/Y từ ADC (channel 13 & 5).
-  * - Lần đầu chạy sẽ calibrate vị trí trung tâm làm gốc.
-  * - Tính rawX, rawY từ chênh lệch so với gốc.
-  * - Áp dụng deadzone, giới hạn và làm mượt tín hiệu đầu vào.
-  * - Ghi kết quả vào biến joystickX, joystickY để điều hướng bắn.
-  * - Đọc trạng thái nút nhấn SW (GPIOC PIN_2), nếu nhấn thì gọi `shootEgg()` và bật buzzer.
-  * - Gửi log qua UART (huart1) để debug calibration và nút nhấn.
-   *
-  * @note Giao tiếp với phần cứng: ADC, GPIO, UART, buzzer.
-  */
-  void Screen2View::updateJoystickInput();
+- **Log debug qua UART đang TẮT** để không chèn `HAL_UART_Transmit` blocking vào
+  luồng render (gây giật). Bật lại bằng cách đặt `#define GAME_DEBUG_UART 1` ở đầu
+  `TouchGFX/gui/src/screen2_screen/Screen2View.cpp`.
+- Cấu hình chân (`.ioc`) do người phụ trách UI/Leader quản lý; tránh sửa `.ioc`
+  song song để không xung đột code sinh tự động.
 
+## KẾT QUẢ
 
-  ```
-   ```C
-    /**
-  * Bắn quả trứng từ đầu nòng súng theo hướng hiện tại của aimAngle.
-  *
-  * - Ẩn quả trứng tiếp theo (`nextEgg`) sau khi bắn.
-  * - Tính toán góc bắn (radian) từ aimAngle.
-  * - Xác định vị trí bắt đầu của viên đạn dựa trên góc và khoảng cách đầu nòng súng.
-  * - Tính hướng bay (dirX, dirY) và tốc độ ban đầu.
-   * - Gọi `createProjectile()` để tạo đạn bay theo hướng vừa tính.
-  *
-  * @note Phối hợp giữa giao diện TouchGFX và logic vật lý đạn.
-  */
-  void Screen2View::shootEgg();
-
-
-  ```
-   ```C
-     /**
-  * Khởi tạo viên đạn mới khi người chơi bắn trứng.
-  *
-  * - Lưu vị trí và vận tốc ban đầu của đạn (x, y, vx, vy).
-  * - Đánh dấu đạn đang hoạt động (`projectileActive = true`).
-  * - Hiển thị ảnh đạn tại vị trí tương ứng, căn giữa theo kích thước ảnh.
-  * - Cập nhật màu và bitmap hiển thị của đạn theo màu quả trứng hiện tại (`currentEggColor`).
-  *
-  * @param x   Vị trí X khởi đầu của viên đạn.
-    * @param y   Vị trí Y khởi đầu của viên đạn.
-  * @param vx  Vận tốc theo trục X.
-  * @param vy  Vận tốc theo trục Y.
-  */
-  void Screen2View::createProjectile(int x, int y, float vx, float vy);
-
-
-  ```
-
-    ```C
-    /**
-   * Vẽ lại toàn bộ lưới trứng trên màn hình dựa vào trạng thái eggGrid.
-  *
-  * - Lấy vị trí gốc của container2 để căn chỉnh toàn bộ lưới.
-  * - Với mỗi ô chứa trứng, chọn bitmap tương ứng theo màu (RED, BLUE, GREEN, ...).
-  * - Tính toán vị trí từng quả theo cấu trúc tổ ong (hexagonal pattern).
-  * - Đặt vị trí và hiển thị ảnh quả trứng tại đúng vị trí.
-  * - Ẩn các ô trống (EMPTY).
-  * - Gọi `invalidate()` để cập nhật lại giao diện sau khi thay đổi.
-  *
-  * @note Sử dụng các hằng số như `EGG_SPACING_X`, `EGG_SPACING_Y`, `HEX_OFFSET` để tạo layout tổ ong.
-  */
-  void Screen2View::renderEggGrid();
-
-
-
-  ```
-
-     ```C
-   /**
-  * Di chuyển toàn bộ lưới trứng xuống 1 hàng và thêm hàng mới ở trên.
-  *
-  * - Dịch chuyển tất cả trứng từ hàng [0..ROWS-2] xuống hàng [1..ROWS-1].
-  * - Gọi `addNewTopRow()` để thêm một hàng trứng mới ở hàng trên cùng (có thể sinh ngẫu nhiên).
-  * - Gọi `renderEggGrid()` để cập nhật lại giao diện người dùng sau khi thay đổi.
-  *
-  * @note Dùng để tăng độ khó hoặc tạo thử thách sau một số lần bắn.
-  */
-  void Screen2View::dropEggGrid();
-
-
-
-
-  ```
-  
-### KẾT QUẢ
-
-[![Xem Video Demo](https://img.youtube.com/vi/S8OTtfaylVM/0.jpg)](https://www.youtube.com/watch?v=S8OTtfaylVM)  
-📺 **Video demo**: Game bắn trứng khủng long điều khiển bằng joystick (STM32 + TouchGFX).
+_(Cập nhật ảnh chụp màn hình / video demo của nhóm tại đây.)_
