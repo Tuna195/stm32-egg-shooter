@@ -9,7 +9,7 @@ GameOverPresenter::GameOverPresenter(GameOverView& v)
 
 void GameOverPresenter::activate()
 {
-	view.showScore(model->getFinalScore());
+	view.showScore(model->getFinalScore(), model->getHighScore());
 }
 
 void GameOverPresenter::deactivate()

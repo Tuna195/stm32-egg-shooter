@@ -14,10 +14,12 @@ public:
     }
 
     void tick();
-    void setFinalScore(int s) { finalScore = s; }
+    void setFinalScore(int s);
     int  getFinalScore() const { return finalScore; }
+    int  getHighScore() const { return highScore; }
 private:
     int finalScore = 0;
+    int highScore = 0;
 protected:
     ModelListener* modelListener;
 };

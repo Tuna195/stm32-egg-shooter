@@ -1077,16 +1077,20 @@ void Screen2View::findAndRemoveMatchingGroup(int row, int col)
 
     // Chạy kiểm tra neo trần sau mọi lần resolve, kể cả khi phát bắn
     // không tạo nhóm. Điều này tự sửa mọi cụm mồ côi còn sót từ state cũ.
+    const bool comboCleared = groupRemoved && (gsize >= 6);
     const int droppedEggs = detachUnsupportedEggs();
     if (groupRemoved || droppedEggs > 0)
     {
-        updateScore((groupRemoved ? gsize : 0) + droppedEggs);
+        updateScore(
+            (groupRemoved ? gsize : 0) +
+            droppedEggs +
+            (comboCleared ? COMBO_BONUS_EGGS : 0));
         renderEggGrid();
     }
 
     if (groupRemoved)
     {
-        Haptic_Play((gsize >= 6) ? HAPTIC_COMBO : HAPTIC_EGG_CLUSTER);
+        Haptic_Play(comboCleared ? HAPTIC_COMBO : HAPTIC_EGG_CLUSTER);
         HAL_UART_Transmit(&huart1, (uint8_t*)"Group cleared!\r\n", 16, 100);
     }
 }
