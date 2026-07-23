@@ -27,12 +27,11 @@ GameOverViewBase::GameOverViewBase() :
     textArea1.setTypedText(touchgfx::TypedText(T___SINGLEUSE_PZKF));
     add(textArea1);
 
-    finalScore.setXY(74, 148);
+    finalScore.setPosition(74, 148, 166, 24);
     finalScore.setColor(touchgfx::Color::getColorFromRGB(0, 0, 0));
     finalScore.setLinespacing(0);
     Unicode::snprintf(scoreTextBuffer, SCORETEXT_SIZE, "%s", touchgfx::TypedText(T_SCORETEXTVALUE).getText());
     finalScore.setWildcard(scoreTextBuffer);
-    finalScore.resizeToCurrentText();
     finalScore.setTypedText(touchgfx::TypedText(T_FINALSCORETEXT));
     add(finalScore);
 

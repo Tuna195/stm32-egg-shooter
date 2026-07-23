@@ -9,6 +9,7 @@
 #include <vector>       // std::vector
 #include <utility>      // std::pair
 #include <functional>   // std::function
+#include <climits>
 template <typename T>
 T clamp(T value, T minVal, T maxVal)
 {
@@ -375,9 +376,21 @@ void Screen2View::spawnNextEgg()
 }
 void Screen2View::updateScore(int destroyedCount)
 {
-    score += destroyedCount * 10;
-    Unicode::snprintf(scoreTextBuffer, 10, "%d", score);
-    scoreText.setWildcard(scoreTextBuffer);
+    if (destroyedCount > 0)
+    {
+        const int maxEggsBeforeOverflow =
+            (INT_MAX - score) / POINTS_PER_EGG;
+        if (destroyedCount > maxEggsBeforeOverflow)
+        {
+            score = INT_MAX;
+        }
+        else
+        {
+            score += destroyedCount * POINTS_PER_EGG;
+        }
+    }
+
+    Unicode::snprintf(scoreTextBuffer, SCORETEXT_SIZE, "%d", score);
     scoreText.invalidate();
 }
 

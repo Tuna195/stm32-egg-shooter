@@ -8,8 +8,7 @@ GameOverView::GameOverView()
 void GameOverView::setupScreen()
 {
     GameOverViewBase::setupScreen();
-    finalScore.setWildcard(scoreBuffer);
-    Unicode::snprintf(scoreBuffer, 10, "%d", 0);
+    Unicode::snprintf(scoreTextBuffer, SCORETEXT_SIZE, "%d", 0);
     finalScore.invalidate();
 }
 
@@ -19,6 +18,6 @@ void GameOverView::tearDownScreen()
 }
 void GameOverView::showScore(int s)
 {
-	Unicode::snprintf(scoreBuffer, 10, "%d", s);
+    Unicode::snprintf(scoreTextBuffer, SCORETEXT_SIZE, "%d", s);
     finalScore.invalidate();
 }
