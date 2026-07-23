@@ -1,29 +1,40 @@
 #include <gui/model/Model.hpp>
 #include <gui/model/ModelListener.hpp>
-#include "cmsis_os.h" // Thư viện FreeRTOS CMSIS
+#include <climits>
+#include "cmsis_os.h"
+#include "high_score.h"
 
-// Lấy biến queue đã khai báo ở main.c
-extern osMessageQueueId_t shootEventQueueHandle;
+extern "C" osMessageQueueId_t shootEventQueueHandle;
 
 Model::Model() : modelListener(0)
 {
+    const uint32_t savedHighScore = HighScore_Load();
+    highScore = (savedHighScore > static_cast<uint32_t>(INT_MAX))
+                    ? INT_MAX
+                    : static_cast<int>(savedHighScore);
+}
 
+void Model::setFinalScore(int s)
+{
+    finalScore = s;
+
+    if (s > highScore)
+    {
+        highScore = s;
+        (void)HighScore_Save(static_cast<uint32_t>(highScore));
+    }
 }
 
 void Model::tick()
 {
-    // Chỉ xử lý khi queue đã được khởi tạo
     if (shootEventQueueHandle != NULL)
     {
         uint8_t msg;
-        // Kiểm tra xem có tin nhắn nào trong Queue không (Timeout = 0 để không block luồng GUI)
+
         if (osMessageQueueGet(shootEventQueueHandle, &msg, NULL, 0) == osOK)
         {
-            // Có tín hiệu nút bắn từ ISR -> Gọi hàm bên Listener (Presenter)
             if (modelListener != nullptr)
             {
-                // Giả định bạn đã có một hàm ví dụ như shootButtonPressed() ở ModelListener
-                // Nếu chưa có, bạn có thể truyền thẳng trực tiếp hoặc tự thêm hàm này.
                 modelListener->shootButtonPressed();
             }
         }

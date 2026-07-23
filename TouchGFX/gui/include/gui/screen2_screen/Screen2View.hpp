@@ -63,6 +63,7 @@ private:
     bool popEggActive[MAX_POP_EGGS];
     int activePopEggs;
     static const int POINTS_PER_EGG = 10;
+    static const int COMBO_BONUS_EGGS = 1;
     int score;
     int shotCount;
     int gridPhase;

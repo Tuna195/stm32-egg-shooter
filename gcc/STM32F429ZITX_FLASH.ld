@@ -64,7 +64,8 @@ MEMORY
 {
   CCMRAM    (xrw)    : ORIGIN = 0x10000000,   LENGTH = 64K
   RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 192K
-  FLASH    (rx)    : ORIGIN = 0x8000000,   LENGTH = 2048K
+  /* Last 128K sector at 0x081E0000 is reserved for persistent high score. */
+  FLASH    (rx)    : ORIGIN = 0x8000000,   LENGTH = 1920K
   SDRAM        (xrw)    : ORIGIN = 0xD0000000,   LENGTH = 8M
 }
 
