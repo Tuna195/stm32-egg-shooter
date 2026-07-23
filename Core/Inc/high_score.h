@@ -5,6 +5,7 @@
 extern "C" {
 #endif
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "stm32f4xx_hal.h"
@@ -15,6 +16,8 @@ extern "C" {
 
 uint32_t HighScore_Load(void);
 HAL_StatusTypeDef HighScore_Save(uint32_t score);
+bool HighScore_AsyncInit(void);
+bool HighScore_RequestSave(uint32_t score);
 
 #ifdef __cplusplus
 }

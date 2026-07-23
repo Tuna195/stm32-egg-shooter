@@ -9,7 +9,7 @@ GameOverView::GameOverView()
     highScoreText.setLinespacing(0);
     Unicode::snprintf(highScoreTextBuffer, HIGHSCORETEXT_SIZE, "%d", 0);
     highScoreText.setWildcard(highScoreTextBuffer);
-    highScoreText.setTypedText(touchgfx::TypedText(T_FINALSCORETEXT));
+    highScoreText.setTypedText(touchgfx::TypedText(T_HIGHSCORETEXT));
     add(highScoreText);
 }
 

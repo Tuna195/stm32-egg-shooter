@@ -15,6 +15,9 @@
       <Text Id="finalScoreText" Alignment="Left" TypographyId="Default">
         <Translation Language="GB">Score: &lt;&gt;</Translation>
       </Text>
+      <Text Id="highScoreText" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">High Score: &lt;&gt;</Translation>
+      </Text>
       <Text Id="__SingleUse_PZKF" Alignment="Left" TypographyId="Large">
         <Translation Language="GB">GAME OVER</Translation>
       </Text>

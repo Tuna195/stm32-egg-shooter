@@ -21,7 +21,7 @@ void Model::setFinalScore(int s)
     if (s > highScore)
     {
         highScore = s;
-        (void)HighScore_Save(static_cast<uint32_t>(highScore));
+        (void)HighScore_RequestSave(static_cast<uint32_t>(highScore));
     }
 }
 
