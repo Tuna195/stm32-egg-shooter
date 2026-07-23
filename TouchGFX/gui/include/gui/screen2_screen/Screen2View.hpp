@@ -44,6 +44,8 @@ private:
     uint8_t eggGrid[ROWS][COLS];
     touchgfx::Image eggImages[ROWS][COLS];
     touchgfx::Box dangerLine;
+    static const int AIM_DOT_COUNT = 22;
+    touchgfx::Box aimDots[AIM_DOT_COUNT];
     static const int MAX_FALLING_EGGS = ROWS * COLS;
     touchgfx::Image fallingEggImages[MAX_FALLING_EGGS];
     float fallingEggY[MAX_FALLING_EGGS];
@@ -107,6 +109,8 @@ private:
     void updateAimDirection();
     void updateCannonAndEggPosition();
     void updateAimLine();
+    void hideAimLine();
+    bool aimPointHitsEgg(float x, float y) const;
     void updateAimVisual();
     bool shootEgg();
     void createProjectile(int x, int y, float vx, float vy);

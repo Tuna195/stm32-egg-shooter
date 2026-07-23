@@ -25,6 +25,15 @@ Screen2View::Screen2View() : score(0), shotCount(0), gridPhase(0), droppedLineCo
     dangerLine.setColor(touchgfx::Color::getColorFromRGB(255, 48, 48));
     add(dangerLine);
 
+    for (int i = 0; i < AIM_DOT_COUNT; ++i)
+    {
+        aimDots[i].setPosition(0, 0, 3, 3);
+        aimDots[i].setColor(touchgfx::Color::getColorFromRGB(80, 220, 255));
+        aimDots[i].setAlpha(static_cast<uint8_t>(230 - i * 6));
+        aimDots[i].setVisible(false);
+        add(aimDots[i]);
+    }
+
     // Khởi tạo mảng eggGrid
     for(int i = 0; i < ROWS; i++) {
         for(int j = 0; j < COLS; j++) {
@@ -604,10 +613,115 @@ void Screen2View::setAimAngle(float angle)
     aimAngle = (int)round(currentAngleFloat);
     isAiming = false;
 }
-// Cập nhật đường ngắm từ base cannon
+// Cập nhật quỹ đạo ngắm từ đầu nòng súng. Các chấm dùng cùng góc bắn,
+// quy tắc phản xạ thành và bán kính va chạm với projectile thật.
 void Screen2View::updateAimLine()
 {
-    // Chưa có Line widget; hướng ngắm được thể hiện bằng cannon và nextEgg.
+    if (projectileActive || !nextEgg.isVisible())
+    {
+        hideAimLine();
+        return;
+    }
+
+    const float radians = (aimAngle * 3.14159f) / 180.0f;
+    float directionX = sinf(radians);
+    const float directionY = -cosf(radians);
+    float pointX = getCannonBaseX() + directionX * 45.0f;
+    float pointY = getCannonBaseY() + directionY * 45.0f;
+
+    const float dotSpacing = 11.0f;
+    const float projectileSize = 32.0f;
+    const float rightLimit = 240.0f - projectileSize;
+    const float topLimit = static_cast<float>(container2.getY());
+    bool trajectoryEnded = false;
+
+    for (int i = 0; i < AIM_DOT_COUNT; ++i)
+    {
+        if (trajectoryEnded)
+        {
+            aimDots[i].setVisible(false);
+            aimDots[i].invalidate();
+            continue;
+        }
+
+        pointX += directionX * dotSpacing;
+        pointY += directionY * dotSpacing;
+
+        if (pointX <= 0.0f)
+        {
+            pointX = 0.0f;
+            directionX = -directionX;
+        }
+        else if (pointX >= rightLimit)
+        {
+            pointX = rightLimit;
+            directionX = -directionX;
+        }
+
+        if (pointY <= topLimit)
+        {
+            pointY = topLimit;
+            trajectoryEnded = true;
+        }
+        else if (aimPointHitsEgg(pointX, pointY))
+        {
+            trajectoryEnded = true;
+        }
+
+        aimDots[i].moveTo(static_cast<int16_t>(pointX) - 1,
+                          static_cast<int16_t>(pointY) - 1);
+        aimDots[i].setVisible(true);
+        aimDots[i].invalidate();
+    }
+}
+
+void Screen2View::hideAimLine()
+{
+    for (int i = 0; i < AIM_DOT_COUNT; ++i)
+    {
+        if (aimDots[i].isVisible())
+        {
+            aimDots[i].setVisible(false);
+            aimDots[i].invalidate();
+        }
+    }
+}
+
+bool Screen2View::aimPointHitsEgg(float x, float y) const
+{
+    const float collisionRadius = 30.0f;
+    const float collisionRadiusSquared = collisionRadius * collisionRadius;
+    const int eggSpacingX = 30;
+    const int eggSpacingY = 26;
+    const int hexOffset = 15;
+    const float baseX = static_cast<float>(container2.getX());
+    const float baseY = static_cast<float>(container2.getY());
+
+    for (int row = 0; row < ROWS; ++row)
+    {
+        for (int col = 0; col < COLS; ++col)
+        {
+            if (!isValidGridPosition(row, col) || eggGrid[row][col] == EMPTY)
+            {
+                continue;
+            }
+
+            const int rowOffset = isShiftedRow(row) ? hexOffset : 0;
+            const float eggCenterX =
+                baseX + static_cast<float>(col * eggSpacingX + rowOffset + 16);
+            const float eggCenterY =
+                baseY + static_cast<float>(row * eggSpacingY + 16);
+            const float dx = x - eggCenterX;
+            const float dy = y - eggCenterY;
+
+            if ((dx * dx + dy * dy) <= collisionRadiusSquared)
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 
@@ -625,6 +739,7 @@ bool Screen2View::shootEgg()
     // Ẩn nextEgg khi bắn
     nextEgg.setVisible(false);
     nextEgg.invalidate();
+    hideAimLine();
 
     float radians = (aimAngle * 3.14159f) / 180.0f;
 
