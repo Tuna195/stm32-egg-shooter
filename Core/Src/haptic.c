@@ -17,17 +17,19 @@ typedef struct
 #define ARRAY_LENGTH(array) ((uint8_t)(sizeof(array) / sizeof((array)[0])))
 
 static const HapticStep shoot_steps[] = {
-    {80U, 40U}
+    {100U, 120U}
 };
 
-static const HapticStep pop_steps[] = {
-    {100U, 60U}, {0U, 50U}, {100U, 60U}
+static const HapticStep egg_cluster_steps[] = {
+    {100U, 90U}, {0U, 55U}, {65U, 55U},
+    {0U, 45U}, {35U, 50U}
 };
 
 static const HapticStep warning_steps[] = {
-    {70U, 100U}, {0U, 70U}, {70U, 100U}
+    {100U, 90U},
+    {  0U, 80U},
+    { 85U, 110U}
 };
-
 static const HapticStep combo_steps[] = {
     {100U, 45U}, {0U, 40U}, {100U, 45U},
     {0U, 40U}, {100U, 90U}
@@ -48,7 +50,9 @@ static const HapticStep p2_score_steps[] = {
 static const HapticPattern patterns[HAPTIC_PATTERN_COUNT] = {
     [HAPTIC_NONE]     = {NULL, 0U},
     [HAPTIC_SHOOT]    = {shoot_steps, ARRAY_LENGTH(shoot_steps)},
-    [HAPTIC_POP]      = {pop_steps, ARRAY_LENGTH(pop_steps)},
+    [HAPTIC_EGG_CLUSTER] = {
+        egg_cluster_steps, ARRAY_LENGTH(egg_cluster_steps)
+    },
     [HAPTIC_WARNING]  = {warning_steps, ARRAY_LENGTH(warning_steps)},
     [HAPTIC_COMBO]    = {combo_steps, ARRAY_LENGTH(combo_steps)},
     [HAPTIC_GAMEOVER] = {gameover_steps, ARRAY_LENGTH(gameover_steps)},
