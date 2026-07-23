@@ -77,7 +77,7 @@ private:
 
     // Biến joystick
     int16_t joystickX, joystickY;
-    int16_t aimAngle;
+    float aimAngle;
     uint8_t currentEggColor; // Màu của viên đạn hiện tại (nextEgg)
     uint8_t projectileColor ; // mùa của viên đang bay
 
@@ -101,7 +101,9 @@ private:
 
     // Cấu hình joystick
     static constexpr int16_t JOYSTICK_DEADZONE = 200;
-    static constexpr int16_t JOYSTICK_MAX_RANGE = 800;
+    static constexpr float AIM_MIN_ANGLE = -80.0f;
+    static constexpr float AIM_MAX_ANGLE = 80.0f;
+    static constexpr float DEG_TO_RAD = 0.01745329252f;
 
     // Hàm xử lý logic
     void clearNextEgg();
@@ -132,7 +134,6 @@ private:
     void smoothAngleToTarget();
     void setAimAngle(float angle);
     void resetAimToCenter();
-    int16_t  applySmoothCurve(int16_t value, int16_t maxRange);
     int getCannonBaseX();
     int getCannonBaseY();
     bool isShiftedRow(int row) const;
@@ -146,8 +147,8 @@ private:
 
         // Hằng số điều chỉnh
         static const int STOP_AIM_DELAY = 200;      // 200ms sau khi dừng mới dừng ngắm
-        static constexpr float SMOOTH_FACTOR = 0.15f;
-        static constexpr float ANGLE_THRESHOLD = 0.5f;
+        static constexpr float SMOOTH_FACTOR = 0.25f;
+        static constexpr float ANGLE_THRESHOLD = 0.15f;
         int findBestAttachPosition(int hitRow, int hitCol);
         int findBestAttachColumn(int targetRow, int preferredCol);
         void handleFailedAttachment(int col);
