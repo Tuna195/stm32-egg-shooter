@@ -44,6 +44,7 @@ extern "C" {
 /* USER CODE BEGIN EC */
 uint32_t getRandom32(void);
 uint8_t  randomColor(void);
+void Joystick_GetADC(uint16_t *x, uint16_t *y);
 /* USER CODE END EC */
 
 /* Exported macro ------------------------------------------------------------*/

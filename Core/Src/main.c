@@ -65,6 +65,8 @@
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
 ADC_HandleTypeDef hadc2;
+DMA_HandleTypeDef hdma_adc1;
+DMA_HandleTypeDef hdma_adc2;
 
 CRC_HandleTypeDef hcrc;
 
@@ -78,6 +80,7 @@ RNG_HandleTypeDef hrng;
 
 SPI_HandleTypeDef hspi5;
 
+TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
 
 UART_HandleTypeDef huart1;
@@ -101,6 +104,10 @@ const osThreadAttr_t GUI_Task_attributes = {
 /* USER CODE BEGIN PV */
 uint8_t isRevD = 0; /* Applicable only for STM32F429I DISCOVERY REVD and above */
 RNG_HandleTypeDef hrng;
+#define JOYSTICK_DMA_SAMPLES 16U
+static uint16_t joystickDmaX[JOYSTICK_DMA_SAMPLES];
+static uint16_t joystickDmaY[JOYSTICK_DMA_SAMPLES];
+static volatile uint8_t joystickDmaReady;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -116,6 +123,7 @@ static void MX_USART1_UART_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_ADC2_Init(void);
 static void MX_RNG_Init(void);
+static void MX_TIM3_Init(void);
 static void MX_TIM4_Init(void);
 void StartDefaultTask(void *argument);
 extern void TouchGFX_Task(void *argument);
@@ -198,11 +206,21 @@ int main(void)
   MX_ADC1_Init();
   MX_ADC2_Init();
   MX_RNG_Init();
+  MX_TIM3_Init();
   MX_TIM4_Init();
   MX_TouchGFX_Init();
   /* Call PreOsInit function */
   MX_TouchGFX_PreOSInit();
   /* USER CODE BEGIN 2 */
+  if ((HAL_ADC_Start_DMA(&hadc1, (uint32_t*)joystickDmaX,
+                         JOYSTICK_DMA_SAMPLES) != HAL_OK) ||
+      (HAL_ADC_Start_DMA(&hadc2, (uint32_t*)joystickDmaY,
+                         JOYSTICK_DMA_SAMPLES) != HAL_OK) ||
+      (HAL_TIM_Base_Start(&htim3) != HAL_OK))
+  {
+    Error_Handler();
+  }
+
   if (Haptic_Init(&htim4, TIM_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
@@ -337,11 +355,11 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ScanConvMode = DISABLE;
   hadc1.Init.ContinuousConvMode = DISABLE;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
-  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
-  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
+  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T3_TRGO;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc1.Init.NbrOfConversion = 1;
-  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.DMAContinuousRequests = ENABLE;
   hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
   if (HAL_ADC_Init(&hadc1) != HAL_OK)
   {
@@ -352,7 +370,7 @@ static void MX_ADC1_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_13;
   sConfig.Rank = 1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
+  sConfig.SamplingTime = ADC_SAMPLETIME_56CYCLES;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -389,11 +407,11 @@ static void MX_ADC2_Init(void)
   hadc2.Init.ScanConvMode = DISABLE;
   hadc2.Init.ContinuousConvMode = DISABLE;
   hadc2.Init.DiscontinuousConvMode = DISABLE;
-  hadc2.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
-  hadc2.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc2.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
+  hadc2.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T3_TRGO;
   hadc2.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc2.Init.NbrOfConversion = 1;
-  hadc2.Init.DMAContinuousRequests = DISABLE;
+  hadc2.Init.DMAContinuousRequests = ENABLE;
   hadc2.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
   if (HAL_ADC_Init(&hadc2) != HAL_OK)
   {
@@ -404,7 +422,7 @@ static void MX_ADC2_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_5;
   sConfig.Rank = 1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
+  sConfig.SamplingTime = ADC_SAMPLETIME_56CYCLES;
   if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -670,6 +688,41 @@ static void MX_SPI5_Init(void)
 }
 
 /**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 8999;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 9;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/**
   * @brief TIM4 Initialization Function
   * @param None
   * @retval None
@@ -867,6 +920,52 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void Joystick_GetADC(uint16_t *x, uint16_t *y)
+{
+  uint32_t sumX = 0U;
+  uint32_t sumY = 0U;
+
+  if (joystickDmaReady != 0x03U)
+  {
+    if (x != NULL)
+    {
+      *x = 2048U;
+    }
+    if (y != NULL)
+    {
+      *y = 2048U;
+    }
+    return;
+  }
+
+  for (uint32_t i = 0U; i < JOYSTICK_DMA_SAMPLES; ++i)
+  {
+    sumX += joystickDmaX[i];
+    sumY += joystickDmaY[i];
+  }
+
+  if (x != NULL)
+  {
+    *x = (uint16_t)(sumX / JOYSTICK_DMA_SAMPLES);
+  }
+  if (y != NULL)
+  {
+    *y = (uint16_t)(sumY / JOYSTICK_DMA_SAMPLES);
+  }
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
+{
+  if (hadc->Instance == ADC1)
+  {
+    joystickDmaReady |= 0x01U;
+  }
+  else if (hadc->Instance == ADC2)
+  {
+    joystickDmaReady |= 0x02U;
+  }
+}
+
 /**
   * @brief  Perform the SDRAM external memory initialization sequence
   * @param  hsdram: SDRAM handle
