@@ -86,22 +86,34 @@ _Ảnh chụp minh họa:_
   - `Nút nhấn`: dùng để bắt đầu lại game hoặc thực hiện bắn
   - `Nguồn USB 5V`: cấp nguồn cho kit hoạt động
 
-## SO ĐỒ SCHEMATIC
+## SƠ ĐỒ KẾT NỐI
 
-### Ghép nối STM32 với joystick
-|STM32F429| Joystick|
-|--|--|
-|VCC|3V|
-|GND|GND|
-|PC3 (ADC1 IN13)| X|
-|PA5 (ADC2 IN5)| Y|
-|PG3 (GPIO EXTI3, pull-up)|SW|
+### Joystick hai trục
 
-### Ghép nối  STM32 với còi Buzzer
-|STM32F429| Còi Buzzer|
-|--|--|
-|PD12|3V|
-|GND|GND|
+| Chân joystick | Chân STM32F429I-DISCO | Chức năng |
+|---|---|---|
+| `VCC` | `3V3` | Nguồn 3,3 V |
+| `GND` | `GND` | Mass chung |
+| `X` / `VRx` | `PC3` | `ADC1_IN13`, lấy mẫu bằng DMA2 Stream0 |
+| `Y` / `VRy` | `PA5` | `ADC2_IN5`, lấy mẫu bằng DMA2 Stream2 |
+| `SW` | `PG3` | GPIO pull-up, ngắt `EXTI3` cạnh xuống để bắn |
+
+> [!WARNING]
+> Không nối `SW` vào `PC2`. PC2 đang được màn hình tích hợp sử dụng làm
+> `LCD_CS`. Nút USER tích hợp trên `PA0` vẫn có thể dùng như nút bắn dự phòng.
+
+### Module motor rung ba chân
+
+| Chân module motor rung | Chân STM32F429I-DISCO | Chức năng |
+|---|---|---|
+| `VCC` | `3V3` hoặc nguồn đúng định mức module | Nguồn cho module |
+| `GND` | `GND` | Mass chung với STM32 |
+| `IN` / `S` | `PD12` | PWM `TIM4_CH1` điều khiển cường độ rung |
+
+> [!CAUTION]
+> Bảng trên áp dụng cho **module motor rung ba chân có mạch driver**. Không
+> nối motor rung hai dây trực tiếp vào PD12; cần transistor/MOSFET, diode bảo
+> vệ và nguồn phù hợp với dòng của motor.
 
 
 
