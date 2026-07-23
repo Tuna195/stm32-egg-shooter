@@ -4,7 +4,7 @@
 
 GameOverView::GameOverView()
 {
-    highScoreText.setPosition(74, 174, 166, 24);
+    highScoreText.setPosition(20, 174, 220, 24);
     highScoreText.setColor(touchgfx::Color::getColorFromRGB(0, 0, 0));
     highScoreText.setLinespacing(0);
     Unicode::snprintf(highScoreTextBuffer, HIGHSCORETEXT_SIZE, "%d", 0);
@@ -16,6 +16,9 @@ GameOverView::GameOverView()
 void GameOverView::setupScreen()
 {
     GameOverViewBase::setupScreen();
+    finalScore.setPosition(20, 148, 210, 24);
+    highScoreText.setPosition(20, 174, 220, 24);
+
     Unicode::snprintf(scoreTextBuffer, SCORETEXT_SIZE, "%d", 0);
     finalScore.invalidate();
 
