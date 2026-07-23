@@ -91,7 +91,7 @@
             "Type": "TextArea",
             "Name": "scoreText",
             "X": 74,
-            "Width": 93,
+            "Width": 166,
             "Height": 24,
             "TextId": "scoreText",
             "TextRotation": "0",
@@ -100,11 +100,11 @@
               "Green": 255,
               "Blue": 255
             },
-            "AutoSize": true,
+            "AutoSize": false,
             "Wildcard1": {
               "TextId": "scoreTextValue",
               "UseBuffer": true,
-              "BufferSize": 10
+              "BufferSize": 12
             }
           },
           {
@@ -186,12 +186,16 @@
             "Name": "finalScore",
             "X": 74,
             "Y": 148,
-            "Width": 73,
+            "Width": 166,
             "Height": 24,
             "TextId": "finalScoreText",
             "TextRotation": "0",
-            "AutoSize": true,
-            "Wildcard1": {}
+            "AutoSize": false,
+            "Wildcard1": {
+              "TextId": "scoreTextValue",
+              "UseBuffer": true,
+              "BufferSize": 12
+            }
           },
           {
             "Type": "ButtonWithLabel",

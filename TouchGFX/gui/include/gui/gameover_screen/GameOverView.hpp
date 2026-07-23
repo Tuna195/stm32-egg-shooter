@@ -12,8 +12,6 @@ public:
     virtual void setupScreen();
     virtual void tearDownScreen();
     void showScore(int s);
-    Unicode::UnicodeChar scoreBuffer[10];
-protected:
 };
 
 #endif // GAMEOVERVIEW_HPP

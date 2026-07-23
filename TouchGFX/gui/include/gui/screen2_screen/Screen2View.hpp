@@ -62,8 +62,8 @@ private:
     int16_t popEggStartY[MAX_POP_EGGS];
     bool popEggActive[MAX_POP_EGGS];
     int activePopEggs;
+    static const int POINTS_PER_EGG = 10;
     int score;
-    Unicode::UnicodeChar scoreBuffer[10];
     int shotCount;
     int gridPhase;
     static const int SHOTS_BEFORE_DROP = 5;

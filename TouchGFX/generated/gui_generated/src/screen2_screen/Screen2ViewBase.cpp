@@ -22,12 +22,11 @@ Screen2ViewBase::Screen2ViewBase()
     nextEgg.setScalingAlgorithm(touchgfx::ScalableImage::NEAREST_NEIGHBOR);
     add(nextEgg);
 
-    scoreText.setXY(74, 0);
+    scoreText.setPosition(74, 0, 166, 24);
     scoreText.setColor(touchgfx::Color::getColorFromRGB(255, 255, 255));
     scoreText.setLinespacing(0);
     Unicode::snprintf(scoreTextBuffer, SCORETEXT_SIZE, "%s", touchgfx::TypedText(T_SCORETEXTVALUE).getText());
     scoreText.setWildcard(scoreTextBuffer);
-    scoreText.resizeToCurrentText();
     scoreText.setTypedText(touchgfx::TypedText(T_SCORETEXT));
     add(scoreText);
 
