@@ -1,6 +1,0 @@
-../../TouchGFX/gui/include/gui/gameover_screen/GameOverPresenter.hpp:28:13:GameOverPresenter::~GameOverPresenter()	0	static
-C:/TouchGFXProjects/Egg_shoot_v2/TouchGFX/gui/src/gameover_screen/GameOverPresenter.cpp:15:6:virtual void GameOverPresenter::deactivate()	0	static
-../../TouchGFX/gui/include/gui/gameover_screen/GameOverPresenter.hpp:28:13:virtual GameOverPresenter::~GameOverPresenter()	8	static
-C:/TouchGFXProjects/Egg_shoot_v2/TouchGFX/gui/src/gameover_screen/GameOverPresenter.cpp:10:6:virtual void GameOverPresenter::activate()	0	static
-../../TouchGFX/gui/include/gui/gameover_screen/GameOverPresenter.hpp:28:13:virtual void* GameOverPresenter::_ZThn4_N17GameOverPresenterD1Ev()	0	static
-C:/TouchGFXProjects/Egg_shoot_v2/TouchGFX/gui/src/gameover_screen/GameOverPresenter.cpp:4:1:GameOverPresenter::GameOverPresenter(GameOverView&)	0	static

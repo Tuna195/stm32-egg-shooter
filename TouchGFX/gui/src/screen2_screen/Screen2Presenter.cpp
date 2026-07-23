@@ -21,3 +21,8 @@ void Screen2Presenter::handleGameOver()
 	model->setFinalScore(view.getScore());
     application().gotoGameOverScreenNoTransition();
 }
+void Screen2Presenter::shootButtonPressed()
+{
+    // Báo cho View thực hiện hành động bắn
+    view.performShootAction();
+}

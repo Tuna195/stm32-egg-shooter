@@ -8,6 +8,7 @@
 "./Application/User/TouchGFX/target/generated/TouchGFXConfiguration.o"
 "./Application/User/TouchGFX/target/generated/TouchGFXGeneratedHAL.o"
 "./Application/User/freertos.o"
+"./Application/User/haptic.o"
 "./Application/User/main.o"
 "./Application/User/stm32f4xx_hal_msp.o"
 "./Application/User/stm32f4xx_hal_timebase_tim.o"

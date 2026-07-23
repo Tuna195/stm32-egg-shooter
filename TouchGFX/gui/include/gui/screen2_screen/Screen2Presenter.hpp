@@ -28,6 +28,8 @@ public:
     virtual ~Screen2Presenter() {}
     void handleGameOver();
 
+    virtual void shootButtonPressed();
+
 private:
     Screen2Presenter();
 

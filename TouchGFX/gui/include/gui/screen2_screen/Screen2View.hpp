@@ -25,6 +25,7 @@ public:
     virtual void tearDownScreen();
     virtual void handleTickEvent() override;
     int getScore() const { return score; }
+    void performShootAction();
 
 
 protected:
