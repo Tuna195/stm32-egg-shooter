@@ -1,4 +1,4 @@
- #include <gui/screen2_screen/Screen2View.hpp>
+#include <gui/screen2_screen/Screen2View.hpp>
 #include <images/BitmapDatabase.hpp>
 #include <touchgfx/Unicode.hpp>
 #include "main.h"
@@ -427,46 +427,31 @@ void Screen2View::clearEggGrid()
 // Trong constructor
 
 
-int readADCChannel(ADC_HandleTypeDef* hadc, uint32_t channel)
-{
-    ADC_ChannelConfTypeDef sConfig = {0};
-    sConfig.Channel = channel;
-    sConfig.Rank = 1;
-    sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
-    HAL_ADC_ConfigChannel(hadc, &sConfig);
-
-    HAL_ADC_Start(hadc);
-    HAL_ADC_PollForConversion(hadc, 100);
-    int val = HAL_ADC_GetValue(hadc);
-    HAL_ADC_Stop(hadc);
-
-    return val;
-}
-
 void Screen2View::updateJoystickInput()
 {
-    extern ADC_HandleTypeDef hadc1;
-    extern ADC_HandleTypeDef hadc2;
     extern UART_HandleTypeDef huart1;
 
-    // Đọc giá trị ADC từ joystick
-    uint32_t adcX = readADCChannel(&hadc1, ADC_CHANNEL_13);
-    uint32_t adcY = readADCChannel(&hadc2, ADC_CHANNEL_5);
+    // DMA circular liên tục lấy mẫu; GUI chỉ đọc giá trị trung bình.
+    uint16_t adcX = 2048U;
+    uint16_t adcY = 2048U;
+    Joystick_GetADC(&adcX, &adcY);
 
-    // Nếu chưa calibrate, lấy vị trí hiện tại làm gốc
+    // Dùng tâm danh định của ADC 12-bit. Không lấy vị trí cần
+    // ở frame đầu làm tâm vì người chơi có thể gạt ngay khi vào game.
     if (!isCalibrated) {
-        joystickCenterX = adcX;
-        joystickCenterY = adcY;
+        joystickCenterX = 2048;
+        joystickCenterY = 2048;
         isCalibrated = true;
 
         char msg[64];
-        snprintf(msg, sizeof(msg), "Calibrated - X:%lu Y:%lu\r\n", adcX, adcY);
+        snprintf(msg, sizeof(msg), "Joystick center - X:%d Y:%d\r\n",
+                 joystickCenterX, joystickCenterY);
         HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
     }
 
     // Tính toán rawX/rawY
-    int16_t rawX = (int16_t)(adcX - joystickCenterX);
-    int16_t rawY = (int16_t)(adcY - joystickCenterY);
+    int16_t rawX = (int16_t)adcX - joystickCenterX;
+    int16_t rawY = (int16_t)adcY - joystickCenterY;
 
     // Chỉ áp dụng deadzone một lần trên giá trị ADC thô.
     if (abs(rawX) < JOYSTICK_DEADZONE) rawX = 0;
@@ -537,6 +522,10 @@ void Screen2View::updateAimDirection()
     }
     else
     {
+        // Khi thả joystick về tâm, đưa hướng bắn về 0 độ.
+        // smoothAngleToTarget() sẽ thực hiện chuyển động này mượt mà.
+        targetAngle = 0.0f;
+
         // Không di chuyển joystick - kiểm tra xem có nên dừng ngắm không
         if(isAiming && (currentTime - lastAimTime) > STOP_AIM_DELAY)
         {
@@ -603,10 +592,10 @@ void Screen2View::testJoystickWithNextEgg()
 void Screen2View::resetJoystickCalibration()
 {
     isCalibrated = false;
-    joystickCenterX = 0;
-    joystickCenterY = 0;
+    joystickCenterX = 2048;
+    joystickCenterY = 2048;
 
-    char msg[] = "Joystick calibration reset. Move to center and wait...\r\n";
+    char msg[] = "Joystick center reset to ADC midpoint.\r\n";
     HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
 }
 
@@ -991,7 +980,7 @@ void Screen2View::findAndRemoveMatchingGroup(int row, int col)
 
     if (groupRemoved)
     {
-        Haptic_Play((gsize >= 6) ? HAPTIC_COMBO : HAPTIC_POP);
+        Haptic_Play((gsize >= 6) ? HAPTIC_COMBO : HAPTIC_EGG_CLUSTER);
         HAL_UART_Transmit(&huart1, (uint8_t*)"Group cleared!\r\n", 16, 100);
     }
 }

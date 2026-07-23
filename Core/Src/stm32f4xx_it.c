@@ -58,6 +58,8 @@
 /* External variables --------------------------------------------------------*/
 extern ADC_HandleTypeDef hadc1;
 extern ADC_HandleTypeDef hadc2;
+extern DMA_HandleTypeDef hdma_adc1;
+extern DMA_HandleTypeDef hdma_adc2;
 extern DMA2D_HandleTypeDef hdma2d;
 extern LTDC_HandleTypeDef hltdc;
 extern TIM_HandleTypeDef htim6;
@@ -161,6 +163,16 @@ void DebugMon_Handler(void)
 /* For the available peripheral interrupt handler names,                      */
 /* please refer to the startup file (startup_stm32f4xx.s).                    */
 /******************************************************************************/
+
+void DMA2_Stream0_IRQHandler(void)
+{
+  HAL_DMA_IRQHandler(&hdma_adc1);
+}
+
+void DMA2_Stream2_IRQHandler(void)
+{
+  HAL_DMA_IRQHandler(&hdma_adc2);
+}
 
 /**
   * @brief This function handles ADC1, ADC2 and ADC3 global interrupts.
