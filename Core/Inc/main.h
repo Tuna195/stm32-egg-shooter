@@ -72,6 +72,13 @@ void Error_Handler(void);
 #define MCU_ACTIVE_GPIO_Port GPIOE
 #define SPI5_NCS_Pin GPIO_PIN_1
 #define SPI5_NCS_GPIO_Port GPIOC
+#define LCD_CS_Pin GPIO_PIN_2
+#define LCD_CS_GPIO_Port GPIOC
+#define USER_BUTTON_Pin GPIO_PIN_0
+#define USER_BUTTON_GPIO_Port GPIOA
+#define JOYSTICK_SW_Pin GPIO_PIN_3
+#define JOYSTICK_SW_GPIO_Port GPIOG
+#define JOYSTICK_SW_EXTI_IRQn EXTI3_IRQn
 
 /* USER CODE BEGIN Private defines */
 extern UART_HandleTypeDef huart1;

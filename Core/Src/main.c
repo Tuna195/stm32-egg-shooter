@@ -111,7 +111,6 @@ static uint16_t joystickDmaY[JOYSTICK_DMA_SAMPLES];
 static volatile uint8_t joystickDmaReady;
 
 osMessageQueueId_t shootEventQueueHandle;
-extern UART_HandleTypeDef huart1; // Để dùng hàm log UART
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -248,9 +247,12 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
-  // Tạo một queue chứa được tối đa 1 phần tử (vì 1 lần bấm chỉ cần 1 tín hiệu),
-  // kích thước mỗi phần tử là 1 byte (uint8_t)
-  shootEventQueueHandle = osMessageQueueNew(1, sizeof(uint8_t), NULL);
+  // Cho phép giữ lại vài lần bấm nếu GUI tạm thời bận render.
+  shootEventQueueHandle = osMessageQueueNew(4, sizeof(uint8_t), NULL);
+  if (shootEventQueueHandle == NULL)
+  {
+    Error_Handler();
+  }
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
@@ -887,7 +889,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOE, VSYNC_FREQ_Pin|RENDER_TIME_Pin|FRAME_RATE_Pin|MCU_ACTIVE_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(SPI5_NCS_GPIO_Port, SPI5_NCS_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOC, SPI5_NCS_Pin|LCD_CS_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
@@ -899,24 +901,24 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : SPI5_NCS_Pin */
-  GPIO_InitStruct.Pin = SPI5_NCS_Pin;
+  /*Configure GPIO pins : SPI5_NCS_Pin LCD_CS_Pin */
+  GPIO_InitStruct.Pin = SPI5_NCS_Pin|LCD_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(SPI5_NCS_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PC2 */
-  GPIO_InitStruct.Pin = GPIO_PIN_2;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PA0 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0;
+  /*Configure GPIO pin : JOYSTICK_SW_Pin */
+  GPIO_InitStruct.Pin = JOYSTICK_SW_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(JOYSTICK_SW_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : USER_BUTTON_Pin */
+  GPIO_InitStruct.Pin = USER_BUTTON_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  HAL_GPIO_Init(USER_BUTTON_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PC4 */
   GPIO_InitStruct.Pin = GPIO_PIN_4;
@@ -935,8 +937,8 @@ static void MX_GPIO_Init(void)
   HAL_NVIC_SetPriority(EXTI0_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(EXTI0_IRQn);
 
-  HAL_NVIC_SetPriority(EXTI2_IRQn, 5, 0);
-  HAL_NVIC_EnableIRQ(EXTI2_IRQn);
+  HAL_NVIC_SetPriority(JOYSTICK_SW_EXTI_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(JOYSTICK_SW_EXTI_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
   /* USER CODE END MX_GPIO_Init_2 */
@@ -1238,8 +1240,8 @@ static void SPI5_Error(void)
 void LCD_IO_Init(void)
 {
   /* Set or Reset the control line */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_SET);
 }
 
 /**
@@ -1251,11 +1253,11 @@ void LCD_IO_WriteData(uint16_t RegValue)
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
 
   /* Reset LCD control line(/CS) and Send data */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_RESET);
   SPI5_Write(RegValue);
 
   /* Deselect: Chip Select high */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_SET);
 }
 
 /**
@@ -1267,11 +1269,11 @@ void LCD_IO_WriteReg(uint8_t Reg)
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
 
   /* Reset LCD control line(/CS) and Send command */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_RESET);
   SPI5_Write(Reg);
 
   /* Deselect: Chip Select high */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_SET);
 }
 
 /**
@@ -1285,7 +1287,7 @@ uint32_t LCD_IO_ReadData(uint16_t RegValue, uint8_t ReadSize)
   uint32_t readvalue = 0;
 
   /* Select: Chip Select low */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_RESET);
 
   /* Reset WRX to send command */
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
@@ -1298,7 +1300,7 @@ uint32_t LCD_IO_ReadData(uint16_t RegValue, uint8_t ReadSize)
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
 
   /* Deselect: Chip Select high */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_SET);
 
   return readvalue;
 }
@@ -1328,27 +1330,23 @@ uint8_t randomColor(void)
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-    // Kiểm tra ngắt đến từ PA0 (USER Button) hoặc PC2 (Joystick SW)
-    if (GPIO_Pin == GPIO_PIN_0 || GPIO_Pin == GPIO_PIN_2)
+    // Joystick SW is active-low on PG3. The on-board PA0 button remains
+    // available as an optional second fire button.
+    if (GPIO_Pin == JOYSTICK_SW_Pin || GPIO_Pin == USER_BUTTON_Pin)
     {
         static uint32_t last_interrupt_time = 0;
         uint32_t current_time = HAL_GetTick();
 
-        // Chống dội phần mềm: Bỏ qua nếu lần ngắt này cách lần trước dưới 50ms
-        if (current_time - last_interrupt_time > 50)
+        // Debounce before posting a non-blocking event from the ISR.
+        if ((current_time - last_interrupt_time) > 50U)
         {
-            uint8_t msg = 1; // Nội dung message không quan trọng, chỉ cần có tín hiệu
-
-            // Gửi message vào queue từ ISR (Không dùng timeout trong ngắt)
-            if (osMessageQueuePut(shootEventQueueHandle, &msg, 0, 0) == osOK)
+            uint8_t msg = 1U;
+            if (shootEventQueueHandle != NULL)
             {
-                // Log chữ "FIRE" qua UART1
-                const char* logMsg = "FIRE\r\n";
-                // Dùng Polling với timeout nhỏ
-                HAL_UART_Transmit(&huart1, (uint8_t*)logMsg, 6, 10);
+                (void)osMessageQueuePut(shootEventQueueHandle, &msg, 0U, 0U);
             }
+            last_interrupt_time = current_time;
         }
-        last_interrupt_time = current_time;
     }
 }
 /* USER CODE END 4 */

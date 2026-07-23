@@ -1,3 +1,16 @@
+> [!IMPORTANT]
+> **Sau khi clone/pull:** không dùng lại các file `STM32CubeIDE/Debug/**`
+> từ máy khác. Đây là build output do STM32CubeIDE sinh ra và có thể chứa
+> đường dẫn tuyệt đối kiểu Windows (`D:/...`) hoặc macOS (`/Users/...`).
+> Hãy import project trong thư mục `STM32CubeIDE`, sau đó chọn
+> **Project → Clean… → Build Project** để IDE tự sinh `Debug/` phù hợp với
+> máy hiện tại. Không commit lại `Debug/`, `Release/` hoặc các file
+> `subdir.mk`.
+>
+> **Dây joystick SW đã chuyển từ PC2 sang PG3.** PC2 là `LCD_CS` của màn hình
+> trên STM32F429I-DISCO nên không được dùng làm nút joystick. Nối chân SW của
+> joystick vào **PG3**; firmware cấu hình PG3 pull-up và EXTI cạnh xuống.
+
 # GAME BẮN TRỨNG KHỦNG LONG
 
 
@@ -10,7 +23,7 @@ __Mục tiêu__: Phát triển một trò chơi tương tác trên nền tảng 
 __Sản phẩm:__
 1. **Điều khiển hướng súng bằng joystick**  
    – Người chơi có thể xoay hướng nòng súng theo ý muốn bằng cần joystick (analog).  
-   – Dữ liệu được đọc qua ADC ở chế độ polling, sau đó chuyển đổi thành góc bắn theo thời gian thực.  
+   – Hai trục được lấy mẫu bằng ADC + DMA vòng tròn, kích bởi TIM3, sau đó chuyển đổi thành góc bắn theo thời gian thực.
    – Hướng nòng súng sẽ thay đổi mượt mà tùy theo độ lệch của cần joystick.
 
 2. **Âm thanh hiệu ứng**  
@@ -32,9 +45,10 @@ __Sản phẩm:__
    – Quản lý trạng thái lưới, cập nhật điểm số, phát hiện game over.  
    – Có xử lý hiệu ứng phản xạ nếu trứng chạm mép trái/phải.
 
-6. **Điều khiển bằng polling (không dùng ngắt/DMA)**  
-   – Joystick được đọc định kỳ trong vòng lặp `handleTickEvent()`.  
-   – Đảm bảo đồng bộ trực tiếp với logic và giao diện game, tránh lỗi timing hoặc race condition.
+6. **ADC DMA và nút bắn bằng ngắt**
+   – Trục X/Y được ADC lấy mẫu nền bằng DMA; giao diện chỉ đọc giá trị trung bình trong `handleTickEvent()`.
+   – Nút SW của joystick dùng EXTI cạnh xuống, chống dội rồi gửi sự kiện bắn qua CMSIS-RTOS message queue.
+   – ISR không gọi trực tiếp TouchGFX và không truyền UART blocking.
 
 
 _Ảnh chụp minh họa:_
@@ -72,22 +86,34 @@ _Ảnh chụp minh họa:_
   - `Nút nhấn`: dùng để bắt đầu lại game hoặc thực hiện bắn
   - `Nguồn USB 5V`: cấp nguồn cho kit hoạt động
 
-## SO ĐỒ SCHEMATIC
+## SƠ ĐỒ KẾT NỐI
 
-### Ghép nối STM32 với joystick
-|STM32F429| Joystick|
-|--|--|
-|VCC|3V|
-|GND|GND|
-|PC3 (ADC1 IN13)| X|
-|PA5 (ADC2 IN5)| Y|
-|PC2 (Digital in) |SW|
+### Joystick hai trục
 
-### Ghép nối  STM32 với còi Buzzer
-|STM32F429| Còi Buzzer|
-|--|--|
-|PD12|3V|
-|GND|GND|
+| Chân joystick | Chân STM32F429I-DISCO | Chức năng |
+|---|---|---|
+| `VCC` | `3V3` | Nguồn 3,3 V |
+| `GND` | `GND` | Mass chung |
+| `X` / `VRx` | `PC3` | `ADC1_IN13`, lấy mẫu bằng DMA2 Stream0 |
+| `Y` / `VRy` | `PA5` | `ADC2_IN5`, lấy mẫu bằng DMA2 Stream2 |
+| `SW` | `PG3` | GPIO pull-up, ngắt `EXTI3` cạnh xuống để bắn |
+
+> [!WARNING]
+> Không nối `SW` vào `PC2`. PC2 đang được màn hình tích hợp sử dụng làm
+> `LCD_CS`. Nút USER tích hợp trên `PA0` vẫn có thể dùng như nút bắn dự phòng.
+
+### Module motor rung ba chân
+
+| Chân module motor rung | Chân STM32F429I-DISCO | Chức năng |
+|---|---|---|
+| `VCC` | `3V3` hoặc nguồn đúng định mức module | Nguồn cho module |
+| `GND` | `GND` | Mass chung với STM32 |
+| `IN` / `S` | `PD12` | PWM `TIM4_CH1` điều khiển cường độ rung |
+
+> [!CAUTION]
+> Bảng trên áp dụng cho **module motor rung ba chân có mạch driver**. Không
+> nối motor rung hai dây trực tiếp vào PD12; cần transistor/MOSFET, diode bảo
+> vệ và nguồn phù hợp với dòng của motor.
 
 
 
@@ -122,11 +148,11 @@ _Ảnh chụp minh họa:_
   - Tích hợp với mã được sinh ra từ TouchGFX (`ScreenView.cpp`, `Model.cpp`, `FrontendApplication.cpp`...).
   - Hỗ trợ build project, debug, nạp firmware vào MCU STM32F429.
 
-- **Joystick + ADC (Polling)**  
+- **Joystick + ADC DMA + EXTI**
   - Dùng 2 kênh ADC để đọc giá trị trục X và Y từ joystick.  
-  - Phương pháp polling: đọc ADC trong hàm `handleTickEvent()` được gọi định kỳ theo tick của TouchGFX.  
-  - Dữ liệu ADC được xử lý để xác định hướng bắn, tính góc và vận tốc đạn theo thời gian thực.  
-  - Tránh dùng ngắt hoặc DMA để đơn giản hóa xử lý và giữ đồng bộ với logic UI/game.
+  - TIM3 kích ADC1/ADC2; DMA2 Stream0/Stream2 ghi liên tục vào buffer vòng tròn.
+  - `handleTickEvent()` đọc giá trị trung bình từ buffer để cập nhật hướng bắn mà không chờ ADC.
+  - Nút SW trên PG3 phát ngắt EXTI3, gửi event vào queue để TouchGFX thực hiện bắn an toàn trong GUI task.
 
 - **RNG (Random Number Generator)**  
   - Tạo ra các đặc tính ngẫu nhiên cho từng màn chơi như màu sắc, vị trí trứng hoặc hướng rơi.  
